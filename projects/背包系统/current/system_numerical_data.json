@@ -1,0 +1,93 @@
+{
+  "bag_item_list": [],
+  "current_bag_category_id": 0,
+  "current_sort_order": 0,
+  "bag_max_slots": 50,
+  "occupied_slots": 0,
+  "item_config_table": [
+    {
+      "id": 10001,
+      "name": "背包扩容券",
+      "description": "使用后可永久增加10格背包容量。",
+      "rarity": 2,
+      "category_id": 3,
+      "usable_flag": true,
+      "discardable_flag": false,
+      "source_description": "来源：商城购买、活动奖励、任务完成",
+      "effect_description": "扩容：增加10格背包容量"
+    },
+    {
+      "id": 10002,
+      "name": "体力药水（小）",
+      "description": "恢复60点体力。",
+      "rarity": 2,
+      "category_id": 3,
+      "usable_flag": true,
+      "discardable_flag": false,
+      "source_description": "来源：关卡掉落、每日签到",
+      "effect_description": "恢复60点体力"
+    },
+    {
+      "id": 20001,
+      "name": "突破材料·初级",
+      "description": "用于角色突破的基础材料。",
+      "rarity": 1,
+      "category_id": 1,
+      "usable_flag": false,
+      "discardable_flag": true,
+      "source_description": "来源：关卡[STAGE_ID]掉落",
+      "effect_description": ""
+    },
+    {
+      "id": 30001,
+      "name": "精致礼物盒",
+      "description": "赠送给角色可提升好感度。",
+      "rarity": 3,
+      "category_id": 2,
+      "usable_flag": false,
+      "discardable_flag": true,
+      "source_description": "来源：活动奖励、商城购买",
+      "effect_description": ""
+    },
+    {
+      "id": 40001,
+      "name": "主线任务信物",
+      "description": "完成主线第一章的证明，不可丢弃。",
+      "rarity": 1,
+      "category_id": 4,
+      "usable_flag": false,
+      "discardable_flag": false,
+      "source_description": "来源：主线任务奖励",
+      "effect_description": ""
+    },
+    {
+      "id": 50001,
+      "name": "旧世界残片",
+      "description": "来历不明的碎片，似乎隐藏着某种秘密。",
+      "rarity": 4,
+      "category_id": 5,
+      "usable_flag": false,
+      "discardable_flag": true,
+      "source_description": "来源：隐藏关卡掉落",
+      "effect_description": ""
+    }
+  ],
+  "MAX_STACK_SIZE": 999,
+  "INITIAL_BAG_CAPACITY": 50,
+  "EXPAND_ITEM_ID": 10001,
+  "EXPAND_SLOTS_PER_USE": 10,
+  "PREMIUM_CURRENCY": "premium_currency",
+  "EXPAND_COST_CURRENCY": 100,
+  "BAG_CAPACITY_HARD_CAP": 500,
+  "MAIL_RETENTION_DAYS": 30,
+  "RETRY_INTERVAL": 5,
+  "MAX_RETRY_COUNT": 3,
+  "STAMINA_RECOVER_VALUE": 60,
+  "STAGE_ID": 1001,
+  "ERROR_BAG_FULL": 1001,
+  "ERROR_ITEM_NOT_ENOUGH": 1002,
+  "UI_BG_COLOR": "#1A1A2ECC",
+  "ICON_SIZE": 80,
+  "FREE_CURRENCY": "free_currency",
+  "GACHA_CURRENCY": "gacha_currency"
+}

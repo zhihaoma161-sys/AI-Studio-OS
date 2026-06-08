@@ -188,6 +188,7 @@ async def api_open_file(data: dict):
 async def api_design(data: dict):
     """提交需求到真实 HFSM 配表工作流。"""
     global active_task, session_log
+    load_dotenv(os.path.join(PROJECT_ROOT, ".env"), override=True)
     text = data.get("text", "").strip()
     if not text:
         return JSONResponse({"ok": False, "error": "需求文本为空"})
@@ -251,6 +252,16 @@ def api_clear_session():
     session_log = []
     modified_files = set()
     save_session()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/reload_settings")
+def api_reload_settings():
+    """Reload local .env values for controllers created after this request."""
+    load_dotenv(os.path.join(PROJECT_ROOT, ".env"), override=True)
+    ctrl = _controller()
+    if ctrl.status not in (TaskStatus.RUNNING, TaskStatus.WAITING_USER):
+        reset_controller(CONTROLLER_ID)
     return JSONResponse({"ok": True})
 
 

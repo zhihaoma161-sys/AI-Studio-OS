@@ -22,7 +22,7 @@ CONCEPT_FILE = os.path.join(WORKSPACE_DIR, "concept_brief.md")
 SCHEMA_FILE = os.path.join(WORKSPACE_DIR, "active_schema.json")
 REVIEW_FILE = os.path.join(WORKSPACE_DIR, "review_board.md")
 STATUS_FILE = os.path.join(WORKSPACE_DIR, "task_status.json")
-CODEX_FILE = os.path.join(WORKSPACE_DIR, "project_codex.md")
+CODEX_FILE = os.path.join(os.environ.get("AI_STUDIO_DATA_DIR", ROOT_DIR), "Knowledge", "project_codex.md")
 KNOWLEDGE_DIR = os.path.join(ROOT_DIR, "Knowledge")
 
 

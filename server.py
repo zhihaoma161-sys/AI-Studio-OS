@@ -18,6 +18,19 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from Skills.llm_settings import get_settings, save_settings, test_settings
+from Skills.codex_builder import approve_standard, build_codex, load_standards
+from Skills.project_store import (
+    analyze_change,
+    apply_change,
+    archive_workspace,
+    get_project,
+    list_stable_projects,
+    migrate_legacy_projects,
+    rollback_project,
+    set_lifecycle,
+)
+
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BUNDLE_DIR = ROOT_DIR
 DATA_DIR = ROOT_DIR
@@ -58,6 +71,15 @@ app.add_middleware(
 router_proc = None
 engine_start_ts = 0
 active_ws: WebSocket | None = None
+
+
+def _refresh_codex():
+    script = os.path.join(BUNDLE_DIR, "Skills", "build_memory_codex.py")
+    if not os.path.isfile(script):
+        return
+    env = os.environ.copy()
+    env["AI_STUDIO_DATA_DIR"] = DATA_DIR
+    subprocess.run([sys.executable, script], cwd=BUNDLE_DIR, env=env, capture_output=True, timeout=60)
 
 
 def _safe_child(base_dir: str, *parts: str) -> str | None:
@@ -130,7 +152,30 @@ def api_status():
             state = json.load(f).get("current_state", "idle")
     except Exception:
         state = "idle"
-    return JSONResponse({"state": state})
+    return JSONResponse({"state": state, "llm_configured": get_settings(DATA_DIR)["configured"]})
+
+
+@app.get("/api/settings/llm")
+def api_get_llm_settings():
+    return JSONResponse(get_settings(DATA_DIR))
+
+
+@app.post("/api/settings/llm/test")
+def api_test_llm_settings(data: dict):
+    try:
+        return JSONResponse(test_settings(data))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+
+@app.post("/api/settings/llm")
+async def api_save_llm_settings(data: dict):
+    try:
+        result = save_settings(DATA_DIR, data)
+        await _proxy_table("POST", "/reload_settings")
+        return JSONResponse({"ok": True, **result})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
 
 @app.get("/api/files")
@@ -231,37 +276,12 @@ async def api_archive(data: dict):
 
 @app.post("/api/archive_project")
 def api_archive_project():
-    """将本次产出归档到 projects/{system_name}_{timestamp}/"""
-    import re as _re
-    meta_file = os.path.join(WS_DIR, "project_meta.json")
-    name = "unnamed"
-    if os.path.exists(meta_file):
-        try:
-            with open(meta_file, "r", encoding="utf-8") as f:
-                raw = json.load(f).get("system_name", "unnamed")
-            name = _re.sub(r'[\\/*?:"<>|]', '_', raw)[:30]
-        except: pass
+    """Archive the workspace into the stable project store."""
+    try:
+        result = archive_workspace(DATA_DIR, WS_DIR)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    safe = _re.sub(r'[\\/*?:"<>|]', '_', name)[:40]
-    dest = os.path.join(DATA_DIR, "projects", f"{safe}_{ts}")
-    os.makedirs(dest, exist_ok=True)
-
-    WHITELIST = {
-        "concept_brief.md", "system_design_draft.md", "system_design_detail.md",
-        "task_plan.md", "system_schema.json",
-        "system_numerical_data.json", "system_numerical_docs.json",
-        "tech_blueprint.md", "audit_feedback.json", "audit_trace_log.md",
-        "final_audit_report.md",
-    }
-    copied = []
-    for f in WHITELIST:
-        src = os.path.join(WS_DIR, f)
-        if os.path.exists(src):
-            shutil.copy2(src, os.path.join(dest, f))
-            copied.append(f)
-
-    # 归档时自动拆表到 Excel/
     try:
         splitter = os.path.join(BUNDLE_DIR, "Skills", "config_splitter.py")
         if os.path.exists(splitter):
@@ -276,30 +296,21 @@ def api_archive_project():
     except Exception:
         pass
 
-    return JSONResponse({"ok": True, "path": dest, "files": copied})
+    _refresh_codex()
+    return JSONResponse(result)
 
 
 @app.get("/api/projects")
 def api_projects():
-    """返回 projects/ 下所有子目录及文件列表"""
-    projects_dir = os.path.join(DATA_DIR, "projects")
-    if not os.path.exists(projects_dir):
-        return JSONResponse({"projects": []})
-
-    result = []
-    for d in sorted(os.listdir(projects_dir), key=lambda d: os.path.getmtime(os.path.join(projects_dir, d)), reverse=True):
-        dp = os.path.join(projects_dir, d)
-        if os.path.isdir(dp):
-            files = sorted(os.listdir(dp))
-            result.append({"name": d, "files": files})
-    return JSONResponse({"projects": result})
+    migrate_legacy_projects(DATA_DIR)
+    return JSONResponse({"projects": list_stable_projects(DATA_DIR)})
 
 
 @app.post("/api/open_project_file")
 async def api_open_project_file(data: dict):
-    folder = data.get("folder", "")
+    folder = data.get("system_id") or data.get("folder", "")
     filename = data.get("file", "")
-    fp = _safe_child(os.path.join(DATA_DIR, "projects"), folder, filename)
+    fp = _safe_child(os.path.join(DATA_DIR, "projects"), folder, "current", filename)
     if not fp or not os.path.isfile(fp):
         return JSONResponse({"ok": False, "error": "项目文件不在允许目录内"}, status_code=400)
     abs_path = os.path.abspath(fp)
@@ -310,6 +321,71 @@ async def api_open_project_file(data: dict):
     else:
         subprocess.call(["xdg-open", abs_path])
     return JSONResponse({"ok": True})
+
+
+@app.post("/api/changes/analyze")
+def api_analyze_change(data: dict):
+    try:
+        result = analyze_change(
+            DATA_DIR,
+            str(data.get("system_id", "")),
+            str(data.get("requirement", "")),
+            generate_proposal=True,
+        )
+        return JSONResponse({"ok": True, **result})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+
+@app.post("/api/changes/apply")
+def api_apply_change(data: dict):
+    try:
+        result = apply_change(
+            DATA_DIR,
+            str(data.get("system_id", "")),
+            str(data.get("change_id", "")),
+            data.get("text_changes"),
+            data.get("numerical_operations"),
+        )
+        _refresh_codex()
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+
+@app.post("/api/projects/{system_id}/rollback")
+def api_rollback_project(system_id: str, data: dict):
+    try:
+        result = rollback_project(DATA_DIR, system_id, str(data.get("history_id", "")))
+        _refresh_codex()
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+
+@app.post("/api/projects/{system_id}/lifecycle")
+def api_project_lifecycle(system_id: str, data: dict):
+    try:
+        result = set_lifecycle(DATA_DIR, system_id, str(data.get("lifecycle", "")))
+        _refresh_codex()
+        return JSONResponse({"ok": True, "project": result})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+
+@app.get("/api/standards")
+def api_standards():
+    return JSONResponse(load_standards(DATA_DIR))
+
+
+@app.post("/api/standards/{candidate_id}/decision")
+def api_standard_decision(candidate_id: str, data: dict):
+    try:
+        standards = approve_standard(DATA_DIR, candidate_id, bool(data.get("approved")))
+        build_codex(DATA_DIR)
+        return JSONResponse({"ok": True, **standards})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
 
 # ==================== WebSocket ====================
@@ -346,6 +422,11 @@ async def ws_terminal(websocket: WebSocket):
         return
     await websocket.accept()
 
+    if not get_settings(DATA_DIR)["configured"]:
+        await websocket.send_json({"type": "error", "msg": "请先在 Web 的 API 配置向导中完成大模型配置"})
+        await websocket.close()
+        return
+
     if active_ws is not None:
         await websocket.send_json({"type": "error", "msg": "控制台已在另一个窗口运行中"})
         await websocket.close()
@@ -354,9 +435,16 @@ async def ws_terminal(websocket: WebSocket):
     active_ws = websocket
     engine_start_ts = time.time()
 
-    # Clear old communication state
+    # Preserve the concept cache while resuming an interrupted task so the
+    # router does not mistake a restart for a new requirement.
     CACHE_FILE = os.path.join(WS_DIR, ".concept_brief_cache.txt")
-    for f in [PROMPT_FILE, RESPONSE_FILE, CACHE_FILE]:
+    try:
+        with open(STATUS_FILE, "r", encoding="utf-8") as f:
+            preserve_cache = json.load(f).get("current_state", "idle") != "idle"
+    except Exception:
+        preserve_cache = False
+    communication_files = [PROMPT_FILE, RESPONSE_FILE] + ([] if preserve_cache else [CACHE_FILE])
+    for f in communication_files:
         if os.path.exists(f):
             os.remove(f)
     os.makedirs(WS_DIR, exist_ok=True)

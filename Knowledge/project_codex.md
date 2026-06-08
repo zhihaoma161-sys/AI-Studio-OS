@@ -1,22 +1,58 @@
 # 项目记忆 Codex
 
-> 仅扫描业务数据表，已过滤框架文件、外键字段。
-> ID 已做范围压缩 / 去重截断，防止 Token 爆炸。
-> 主键/外键已严格区分：只记录本模块主键 ID。
+> 本文档仅从稳定归档项目与当前有效数值表生成。候选规范不会约束 Agent，只有人工批准的规范会生效。
 
-## 系统概览
-- 已有系统模块: UI透明化, 付费埋点, 免费产出, 商城系统联动, 图鉴系统联动, 场景布置, 场景模板切换, 姿势系统, 拍照模式, 换装系统, 擦边底线, 方案保存与切换, 活动系统联动, 物理反馈, 画质分级系统联动, 表情系统, 角色获取系统联动, 角色选择与场景加载, 资源循环, 运镜设计
+## 系统清单
+- **全品类美术图鉴** (`全品类美术图鉴`) | 状态: active | 修订: r1 | 最近变更: legacy_migration
+  - 依赖: 邮件系统
+  - 数值表: category_definition, category_progress, entry_display, entry_unlock, milestone_reward, sort_filter, system_linkage, total_progress
+- **活动大厅** (`活动大厅`) | 状态: active | 修订: r1 | 最近变更: legacy_migration
+  - 依赖: 背包系统, 邮件系统
+  - 数值表: activity_config, global_params
+- **背包系统** (`背包系统`) | 状态: active | 修订: r2 | 最近变更: legacy_migration
+  - 依赖: 邮件系统
+  - 数值表: bag_item_list, item_config_table
+- **角色外观自定义系统** (`角色外观自定义系统`) | 状态: active | 修订: r1 | 最近变更: legacy_migration
+  - 依赖: 背包系统
+  - 数值表: character_data, dye_system, item_definition
+- **邮件系统** (`邮件系统`) | 状态: active | 修订: r1 | 最近变更: legacy_migration
+  - 依赖: 背包系统
+  - 数值表: continuous_formulas, discrete_milestones
 
-## 已占用的主键 ID（范围压缩 / 去重截断）
-- 共 4 组
-  - `[base_expressions] expression_id: blink_01, smile_01`
-  - `[base_poses] pose_id: sit_01, stand_01`
-  - `[free_filters] filter_id: cool_01, natural_01, soft_01 ...等 5 个`
-  - `[scene_templates] template_id: balcony_01, bedroom_01, garden_01 ...等 5 个`
+## 当前有效数值表
+- **item_config_table.json** | 6 行 | 字段: `category_id, description, discardable_flag, effect_description, id, name, rarity, source_description, usable_flag` | 主键范围: 10001 ~ 50001
 
-## 业务数据表清单
-- **.web_prompt.json** (0.1 KB) | 顶级 Key: `prompt, ts, answered`
-- **project_meta.json** (0.1 KB) | 顶级 Key: `system_name, primary_tag, version`
-- **system_numerical_data.json** (2.6 KB) | 顶级 Key: `global_parameters, scene_templates, base_poses, base_expressions, free_filters` | 主键: [scene_templates] template_id: balcony_01, bedroom_01, garden_01 ...等 5 个, [base_poses] pose_id: sit_01, stand_01, [base_expressions] expression_id: blink_01, smile_01, [free_filters] filter_id: cool_01, natural_01, soft_01 ...等 5 个
-- **system_numerical_docs.json** (5.5 KB) | 顶级 Key: `system_summary, field_dictionary, relations_and_enums, implementation_notes`
-- **system_schema.json** (2.6 KB) | 模块: UI透明化, 付费埋点, 免费产出, 商城系统联动, 图鉴系统联动, 场景布置, 场景模板切换, 姿势系统, 拍照模式, 换装系统
+## 已批准项目规范
+- （暂无，候选规范需在 Web 端人工确认）
+
+## 候选项目规范
+- `heading:Numerical-Planner-数值策划` 文档应包含“Numerical Planner (数值策划)”相关章节 | 证据: 背包系统, 角色外观自定义系统
+- `heading:Schema-Translator-格式翻译` 文档应包含“Schema Translator (格式翻译)”相关章节 | 证据: 背包系统, 角色外观自定义系统
+- `heading:UI-组件层` 文档应包含“UI 组件层”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:付费埋点` 文档应包含“付费埋点”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 角色外观自定义系统, 邮件系统
+- `heading:任务分解` 文档应包含“任务分解”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:免费产出` 文档应包含“免费产出”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 角色外观自定义系统, 邮件系统
+- `heading:内容生产量` 文档应包含“内容生产量”相关章节 | 证据: 全品类美术图鉴, 角色外观自定义系统
+- `heading:前后端通信协议-API-数据对接` 文档应包含“前后端通信协议 (API & 数据对接)”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:前端模块划分-Client` 文档应包含“前端模块划分 (Client)”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:后端逻辑划分-Server` 文档应包含“后端逻辑划分 (Server)”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:开发优先级与依赖链路-执行排期-核心` 文档应包含“开发优先级与依赖链路 (执行排期) ★ 核心”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:待确认风险与追问` 文档应包含“待确认风险与追问”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:性能风险` 文档应包含“性能风险”相关章节 | 证据: 全品类美术图鉴, 角色外观自定义系统
+- `heading:执行顺序与依赖` 文档应包含“执行顺序与依赖”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:持久化数据-DB` 文档应包含“持久化数据 (DB)”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:擦边底线` 文档应包含“擦边底线”相关章节 | 证据: 活动大厅, 角色外观自定义系统, 邮件系统
+- `heading:数值与配置表挂载` 文档应包含“数值与配置表挂载”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:整体架构概述` 文档应包含“整体架构概述”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:旧系统与数据联动` 文档应包含“旧系统与数据联动”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:核心校验逻辑` 文档应包含“核心校验逻辑”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:核心规则与玩法机制` 文档应包含“核心规则与玩法机制”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:活动系统` 文档应包含“活动系统”相关章节 | 证据: 全品类美术图鉴, 邮件系统
+- `heading:系统定位` 文档应包含“系统定位”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 角色外观自定义系统, 邮件系统
+- `heading:系统概述与设计愿景` 文档应包含“系统概述与设计愿景”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:经济循环与商业化埋点` 文档应包含“经济循环与商业化埋点”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:表现层与角色展示联动` 文档应包含“表现层与角色展示联动”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 邮件系统
+- `heading:表现层控制器` 文档应包含“表现层控制器”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 背包系统, 角色外观自定义系统, 邮件系统
+- `heading:设计目标` 文档应包含“设计目标”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 角色外观自定义系统, 邮件系统
+- `heading:资源循环` 文档应包含“资源循环”相关章节 | 证据: 全品类美术图鉴, 活动大厅, 角色外观自定义系统, 邮件系统
+- `heading:阶段一-P0-底层数据与协议` 文档应包含“阶段一 (P0 - 底层数据与协议)”相关章节 | 证据: 活动大厅, 背包系统, 邮件系统

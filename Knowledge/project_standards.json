@@ -1,0 +1,371 @@
+{
+  "approved": [],
+  "candidates": [
+    {
+      "id": "heading:Numerical-Planner-数值策划",
+      "title": "文档应包含“Numerical Planner (数值策划)”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "背包系统",
+        "角色外观自定义系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:Schema-Translator-格式翻译",
+      "title": "文档应包含“Schema Translator (格式翻译)”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "背包系统",
+        "角色外观自定义系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:UI-组件层",
+      "title": "文档应包含“UI 组件层”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:付费埋点",
+      "title": "文档应包含“付费埋点”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:任务分解",
+      "title": "文档应包含“任务分解”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:免费产出",
+      "title": "文档应包含“免费产出”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:内容生产量",
+      "title": "文档应包含“内容生产量”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "角色外观自定义系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:前后端通信协议-API-数据对接",
+      "title": "文档应包含“前后端通信协议 (API & 数据对接)”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:前端模块划分-Client",
+      "title": "文档应包含“前端模块划分 (Client)”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:后端逻辑划分-Server",
+      "title": "文档应包含“后端逻辑划分 (Server)”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:开发优先级与依赖链路-执行排期-核心",
+      "title": "文档应包含“开发优先级与依赖链路 (执行排期) ★ 核心”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:待确认风险与追问",
+      "title": "文档应包含“待确认风险与追问”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:性能风险",
+      "title": "文档应包含“性能风险”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "角色外观自定义系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:执行顺序与依赖",
+      "title": "文档应包含“执行顺序与依赖”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:持久化数据-DB",
+      "title": "文档应包含“持久化数据 (DB)”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:擦边底线",
+      "title": "文档应包含“擦边底线”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "活动大厅",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:数值与配置表挂载",
+      "title": "文档应包含“数值与配置表挂载”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:整体架构概述",
+      "title": "文档应包含“整体架构概述”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:旧系统与数据联动",
+      "title": "文档应包含“旧系统与数据联动”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:核心校验逻辑",
+      "title": "文档应包含“核心校验逻辑”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:核心规则与玩法机制",
+      "title": "文档应包含“核心规则与玩法机制”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:活动系统",
+      "title": "文档应包含“活动系统”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:系统定位",
+      "title": "文档应包含“系统定位”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:系统概述与设计愿景",
+      "title": "文档应包含“系统概述与设计愿景”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:经济循环与商业化埋点",
+      "title": "文档应包含“经济循环与商业化埋点”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:表现层与角色展示联动",
+      "title": "文档应包含“表现层与角色展示联动”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:表现层控制器",
+      "title": "文档应包含“表现层控制器”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "背包系统",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:设计目标",
+      "title": "文档应包含“设计目标”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:资源循环",
+      "title": "文档应包含“资源循环”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "全品类美术图鉴",
+        "活动大厅",
+        "角色外观自定义系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    },
+    {
+      "id": "heading:阶段一-P0-底层数据与协议",
+      "title": "文档应包含“阶段一 (P0 - 底层数据与协议)”相关章节",
+      "kind": "repeated_document_pattern",
+      "evidence_systems": [
+        "活动大厅",
+        "背包系统",
+        "邮件系统"
+      ],
+      "status": "candidate"
+    }
+  ],
+  "rejected_ids": []
+}

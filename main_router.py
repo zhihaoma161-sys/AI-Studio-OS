@@ -433,13 +433,18 @@ def main():
     else:
         print(f"[Router] 概念简案为空，等待老板编写: {CONCEPT_FILE}\n")
 
-    # ---- 开机清理 ----
-    print("[Router] 正在执行开机清理...")
-    # 1. 强制重置状态为 idle
-    write_state("idle")
-    current_state = "idle"
+    # ---- 开机恢复 / 清理 ----
+    previous_state = read_state()
+    recovering = previous_state != "idle"
+    if recovering:
+        current_state = previous_state
+        print(f"[Router] 检测到中断任务，保留工作区并从状态继续: {previous_state}")
+    else:
+        print("[Router] 当前无中断任务，正在执行开机清理...")
+        write_state("idle")
+        current_state = "idle"
 
-    # 2. 清理上一炉的旧文件（仅限 workspace 根目录，严禁触碰 project_db/）
+    # 仅在空闲启动时清理上一轮旧文件（严禁触碰 project_db/）
     files_to_clean = [
         "task_route.json",
         "system_schema.json",
@@ -451,11 +456,12 @@ def main():
         "ui_interaction_blueprint.md",
         "guild_design_data.json",
     ]
-    for f in files_to_clean:
-        filepath = os.path.join(WORKSPACE_DIR, f)
-        if os.path.exists(filepath):
-            os.remove(filepath)
-            print(f"[Router] 已清理历史遗留文件: {f}")
+    if not recovering:
+        for f in files_to_clean:
+            filepath = os.path.join(WORKSPACE_DIR, f)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                print(f"[Router] 已清理历史遗留文件: {f}")
 
     print("[Router] AI Studio OS 调度中枢已就绪（等待修改概念简案）...\n")
 

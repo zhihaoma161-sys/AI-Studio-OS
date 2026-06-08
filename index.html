@@ -58,12 +58,24 @@ body{display:flex;}
 .proj-files.open{display:block;}
 .proj-file{padding:8px 15px;cursor:pointer;border-bottom:1px solid #eee;font-size:13px;}
 .proj-file:hover{background:#f5f5f5;}
+.mode-bar{display:flex;gap:10px;margin-bottom:12px;align-items:center;}
+.mode-bar select{padding:8px;border:1px solid #777;background:#fff;min-width:180px;}
+.history-meta{font-size:12px;color:#666;padding:6px 15px;background:#fafafa;}
+.mini-btn{padding:5px 9px;border:1px solid #555;background:#fff;cursor:pointer;margin:3px;}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:1000;}
+.modal-backdrop.open{display:flex;}
+.modal{width:520px;background:#fff;border:2px solid #333;padding:22px;}
+.modal h2{margin-bottom:15px;}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:15px;}
+.settings-status{font-size:13px;color:#666;min-height:20px;margin-top:8px;}
+.standard-card{padding:10px;border-bottom:1px solid #ddd;background:#fafafa;}
 </style>
 </head>
 <body>
 
 <div class="sidebar">
     <h3>AI Studio OS</h3>
+    <button id="settingsBtn" style="padding:8px;margin-bottom:12px;background:#fff;border:0;cursor:pointer;font-weight:bold;">API 配置</button>
     <button class="nav-btn active" data-tab="write">设计项目</button>
     <button class="nav-btn" data-tab="memory">记忆积累</button>
     <button class="nav-btn" data-tab="history">存档项目</button>
@@ -73,6 +85,15 @@ body{display:flex;}
 <div id="mainContent">
     <div class="tab-content active" id="tab-write">
         <div class="workspace">
+            <div class="mode-bar">
+                <label for="workMode"><b>工作模式</b></label>
+                <select id="workMode">
+                    <option value="new">新建系统</option>
+                    <option value="modify">修改已有系统</option>
+                </select>
+                <select id="modifyProject" style="display:none"></select>
+                <span id="changeStatus" style="font-size:13px;color:#666;"></span>
+            </div>
             <div class="log-header">终端日志</div>
             <div class="log-area" id="logArea">[System] 等待引擎启动...</div>
             <div class="control-bar">
@@ -111,6 +132,8 @@ body{display:flex;}
                 <button class="mem-btn red" id="btnBlack">归入错误案例</button>
                 <button class="mem-btn green" id="btnRed">归入优秀案例</button>
             </div><div class="mem-result" id="archResult"></div>
+            <h2 style="margin-top:25px;">候选项目规范</h2>
+            <div id="standardCandidates"></div>
         </div>
         <div class="file-explorer">
             <h2>优秀案例</h2><div id="bestFiles"><div style="color:#999;font-size:13px;">（空）</div></div>
@@ -144,8 +167,35 @@ body{display:flex;}
     </div>
 </div>
 
+<div class="modal-backdrop" id="settingsModal">
+    <div class="modal">
+        <h2>大模型 API 配置</h2>
+        <label class="mem-label">供应商</label>
+        <select class="mem-input" id="llmProvider">
+            <option value="deepseek">DeepSeek</option>
+            <option value="openai">OpenAI</option>
+            <option value="dashscope">通义千问</option>
+            <option value="ollama">本地 Ollama</option>
+            <option value="custom">自定义 OpenAI 兼容接口</option>
+        </select>
+        <label class="mem-label">API Key</label>
+        <input class="mem-input" id="llmApiKey" type="password" placeholder="本地 Ollama 可留空">
+        <label class="mem-label">API 接口地址</label>
+        <input class="mem-input" id="llmBaseUrl" placeholder="https://api.example.com/v1">
+        <label class="mem-label">模型名</label>
+        <input class="mem-input" id="llmModel" placeholder="模型名称">
+        <div class="settings-status" id="settingsStatus"></div>
+        <div class="modal-actions">
+            <button class="mini-btn" id="settingsClose">关闭</button>
+            <button class="mini-btn" id="settingsTest">测试连接</button>
+            <button class="mini-btn" id="settingsSave" style="background:#333;color:#fff;">保存配置</button>
+        </div>
+    </div>
+</div>
+
 <script>
-const API = 'http://localhost:8080';
+const API = window.location.origin;
+const WS_API = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
 const STATE_LABELS = {
     "idle":"Idle","pending_classification":"分类中","clarifying_requirements":"追问中",
     "pending_design_approval":"草案审批","pending_plan_approval":"排期审批",
@@ -174,6 +224,14 @@ const fileList = document.getElementById('fileList');
 
 let ws = null, engineRunning = false, hitlActive = false;
 let lastLogLine = '', dupCount = 0;
+let llmConfigured = false, projectCache = [];
+const PROVIDER_DEFAULTS = {
+    deepseek:['https://api.deepseek.com/v1','deepseek-chat'],
+    openai:['https://api.openai.com/v1','gpt-4.1-mini'],
+    dashscope:['https://dashscope.aliyuncs.com/compatible-mode/v1','qwen-plus'],
+    ollama:['http://localhost:11434/v1','qwen2.5:7b'],
+    custom:['','']
+};
 
 // Tabs
 document.querySelectorAll('.nav-btn').forEach(b => {
@@ -182,17 +240,18 @@ document.querySelectorAll('.nav-btn').forEach(b => {
         document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
         document.getElementById('tab-' + b.dataset.tab).classList.add('active');
-        if (b.dataset.tab === 'memory') refreshKnowledge();
+        if (b.dataset.tab === 'memory') { refreshKnowledge(); loadStandards(); }
         if (b.dataset.tab === 'history') loadProjects();
     };
 });
 
 // Engine
 function startEngine() {
+    if (!llmConfigured) { openSettings(true); return; }
     if (ws) return;
     appendToLog('[GUI] 正在连接引擎...');
     engineRunning = true; updateButtons();
-    ws = new WebSocket('ws://localhost:8080/ws/terminal');
+    ws = new WebSocket(WS_API + '/ws/terminal');
     ws.onopen = () => { appendToLog('[GUI] WebSocket 已连接'); startPolling(); };
     ws.onmessage = (e) => {
         try {
@@ -292,7 +351,9 @@ userInput.addEventListener('keydown', async function(e) {
         e.preventDefault();
         const text = userInput.value.trim();
         if (!text) return;
-        if (!engineRunning) {
+        if (document.getElementById('workMode').value === 'modify') {
+            await submitChangeRequest(text);
+        } else if (!engineRunning) {
             await fetch(API+'/api/concept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
             startEngine();
         } else if (hitlActive && ws && ws.readyState === WebSocket.OPEN) {
@@ -324,6 +385,20 @@ function refreshKnowledge() {
     fetch(API+'/api/knowledge?type=anti').then(r=>r.json()).then(d=>{
         document.getElementById('antiFiles').innerHTML = d.files.length ? d.files.map(f=>`<div class="file-item" onclick="openKnowledge('anti','${f}')"><span class="file-icon md">M</span><span class="file-name">${f}</span></div>`).join('') : '<div style="color:#999;font-size:13px;">（空）</div>';
     }).catch(()=>{});
+}
+
+async function loadStandards() {
+    try {
+        const d = await (await fetch(API+'/api/standards')).json();
+        document.getElementById('standardCandidates').innerHTML = d.candidates.length ? d.candidates.map(s=>`
+            <div class="standard-card"><b>${s.title}</b><br><small>证据：${s.evidence_systems.join(', ')}</small><br>
+            <button class="mini-btn" onclick="decideStandard('${s.id}',true)">批准</button>
+            <button class="mini-btn" onclick="decideStandard('${s.id}',false)">忽略</button></div>`).join('') : '<div style="color:#999;">（暂无）</div>';
+    } catch(e) {}
+}
+async function decideStandard(id, approved) {
+    await fetch(API+'/api/standards/'+encodeURIComponent(id)+'/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved})});
+    loadStandards();
 }
 function openKnowledge(t,f){fetch(API+'/api/open_knowledge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:t,file:f})}).catch(()=>{});}
 document.getElementById('btnRed').onclick=()=>archive('red');
@@ -361,23 +436,83 @@ function toggleProj(el) {
 async function loadProjects() {
     try {
         const d = await (await fetch(API + '/api/projects')).json();
+        projectCache = d.projects;
+        refreshModifyProjects();
         document.getElementById('projectList').innerHTML = d.projects.map(p => `
             <div class="proj-folder">
-                <div class="proj-header" onclick="toggleProj(this)">📁 ${p.name}</div>
+                <div class="proj-header" onclick="toggleProj(this)">📁 ${p.system_name} · r${p.revision} · ${p.lifecycle}</div>
+                <div class="history-meta">最近变更：${p.latest_change||'无'} · 历史快照：${p.history_count}
+                    ${p.history && p.history.length ? `<button class="mini-btn" onclick="event.stopPropagation();rollbackProject('${p.system_id}','${p.history[p.history.length-1].id}')">回滚上一版</button>`:''}
+                    <button class="mini-btn" onclick="event.stopPropagation();setLifecycle('${p.system_id}','active')">设为正常</button>
+                    <button class="mini-btn" onclick="event.stopPropagation();setLifecycle('${p.system_id}','deprecated')">标记废弃</button>
+                    <button class="mini-btn" onclick="event.stopPropagation();setLifecycle('${p.system_id}','deleted')">标记删除</button>
+                </div>
                 <div class="proj-files">
-                    ${p.files.map(f => `<div class="proj-file" onclick="openProjectFile('${p.name}','${f}')">📄 ${f}</div>`).join('')}
+                    ${p.files.map(f => `<div class="proj-file" onclick="openProjectFile('${p.system_id}','${f}')">📄 ${f}</div>`).join('')}
                 </div>
             </div>`).join('');
     } catch(e) {}
 }
 
-async function openProjectFile(folder, filename) {
+async function openProjectFile(systemId, filename) {
     await fetch(API + '/api/open_project_file', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({folder, file: filename})
+        body: JSON.stringify({system_id: systemId, file: filename})
     }).catch(() => {});
 }
+
+document.getElementById('workMode').onchange = async e => {
+    const modifying = e.target.value === 'modify';
+    document.getElementById('modifyProject').style.display = modifying ? 'inline-block' : 'none';
+    userInput.placeholder = modifying ? '输入对已有系统的修改需求，Enter 后先进行影响分析...' : '输入需求后按 Enter 提交...';
+    if (modifying) await loadProjects();
+};
+function refreshModifyProjects() {
+    const select = document.getElementById('modifyProject');
+    select.innerHTML = projectCache.filter(p=>p.lifecycle!=='deleted').map(p=>`<option value="${p.system_id}">${p.system_name} · r${p.revision}</option>`).join('');
+}
+async function submitChangeRequest(requirement) {
+    const systemId = document.getElementById('modifyProject').value;
+    if (!systemId) return alert('请先选择要修改的系统');
+    const status = document.getElementById('changeStatus');
+    status.textContent='正在分析影响范围...';
+    const analysis = await (await fetch(API+'/api/changes/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_id:systemId,requirement})})).json();
+    if (!analysis.ok) { status.textContent='分析失败'; return alert(analysis.error||'分析失败'); }
+    const textPreview=(analysis.preview?.text_changes||[]).map(x=>`[${x.file} @ ${x.anchor||'定位章节'}]\n${x.content}${x.deprecated?`\n废弃：${x.deprecated}`:''}`).join('\n\n');
+    const numberPreview=(analysis.preview?.numerical_operations||[]).map(x=>JSON.stringify(x)).join('\n');
+    const message = `影响文件：${analysis.affected_files.join(', ')||'无'}\n执行 Agent：${analysis.affected_agents.join(', ')||'无'}\n依赖系统：${analysis.dependent_systems.join(', ')||'无'}\n\n文本变更预览：\n${textPreview||'无'}\n\n数值变更预览：\n${numberPreview||'无'}\n\n确认应用以上局部修改并执行终审？`;
+    if (!confirm(message)) { status.textContent='已取消应用'; return; }
+    status.textContent='正在应用并终审...';
+    const result = await (await fetch(API+'/api/changes/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_id:systemId,change_id:analysis.change_id})})).json();
+    status.textContent=result.ok?`修改完成：r${result.revision}`:'修改失败';
+    if (!result.ok) alert(result.error||'修改失败');
+    userInput.value='';
+    await loadProjects();
+}
+async function rollbackProject(systemId, historyId) {
+    if (!confirm('确认回滚到该历史快照？当前版本也会自动备份。')) return;
+    const result = await (await fetch(API+`/api/projects/${encodeURIComponent(systemId)}/rollback`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({history_id:historyId})})).json();
+    alert(result.ok?'回滚完成':'回滚失败：'+(result.error||''));
+    loadProjects();
+}
+async function setLifecycle(systemId, lifecycle) {
+    if (lifecycle==='deleted' && !confirm('确认标记删除？仍被其他系统依赖时会被阻止。')) return;
+    const result = await (await fetch(API+`/api/projects/${encodeURIComponent(systemId)}/lifecycle`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lifecycle})})).json();
+    if (!result.ok) alert('状态修改失败：'+(result.error||''));
+    loadProjects();
+}
+
+const settingsModal=document.getElementById('settingsModal');
+function openSettings(required=false){settingsModal.classList.add('open');document.getElementById('settingsClose').style.display=required?'none':'inline-block';}
+document.getElementById('settingsBtn').onclick=()=>openSettings(false);
+document.getElementById('settingsClose').onclick=()=>settingsModal.classList.remove('open');
+document.getElementById('llmProvider').onchange=e=>{const d=PROVIDER_DEFAULTS[e.target.value];document.getElementById('llmBaseUrl').value=d[0];document.getElementById('llmModel').value=d[1];};
+function settingsPayload(){return {provider:document.getElementById('llmProvider').value,api_key:document.getElementById('llmApiKey').value,base_url:document.getElementById('llmBaseUrl').value,model:document.getElementById('llmModel').value};}
+document.getElementById('settingsTest').onclick=async()=>{const s=document.getElementById('settingsStatus');s.textContent='正在测试连接...';const d=await (await fetch(API+'/api/settings/llm/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settingsPayload())})).json();s.textContent=d.ok?'连接成功：'+d.message:'测试失败：'+d.error;};
+document.getElementById('settingsSave').onclick=async()=>{const s=document.getElementById('settingsStatus');s.textContent='正在保存...';const d=await (await fetch(API+'/api/settings/llm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settingsPayload())})).json();if(d.ok){llmConfigured=true;s.textContent='配置已保存并立即生效';setTimeout(()=>settingsModal.classList.remove('open'),500);}else{s.textContent='保存失败：'+d.error;}};
+async function initSettings(){try{const d=await (await fetch(API+'/api/settings/llm')).json();llmConfigured=d.configured;document.getElementById('llmProvider').value=d.provider||'deepseek';document.getElementById('llmBaseUrl').value=d.base_url||PROVIDER_DEFAULTS.deepseek[0];document.getElementById('llmModel').value=d.model||PROVIDER_DEFAULTS.deepseek[1];document.getElementById('llmApiKey').placeholder=d.api_key_masked?`已保存：${d.api_key_masked}，留空会清除`:'本地 Ollama 可留空';if(!d.configured)openSettings(true);}catch(e){openSettings(true);}}
+initSettings();
 
 // ==================== 配置表 ====================
 const TABLE_API = API;

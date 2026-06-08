@@ -7,6 +7,8 @@ LLM Client (大模型底层通道)
 import os
 import re
 import time
+import json
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -21,22 +23,8 @@ else:
     _env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=_env_path)
 
-LLM_API_KEY = os.getenv("LLM_API_KEY")
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
-
-if not LLM_API_KEY:
-    raise RuntimeError(
-        f"未找到 LLM_API_KEY，请检查 {_env_path} 文件是否配置正确"
-    )
-
-# ---- 初始化 Client ----
-_client = OpenAI(
-    api_key=LLM_API_KEY,
-    base_url=LLM_BASE_URL,
-)
-
 # ---- 配置 ----
-DEFAULT_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
+DEFAULT_MODEL = "deepseek-chat"
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_MAX_TOKENS = 8192
 MAX_RETRIES = 3
@@ -67,12 +55,20 @@ def ask_llm(
     异常:
         连续重试 MAX_RETRIES 次后仍失败则抛出 RuntimeError
     """
+    load_dotenv(dotenv_path=_env_path, override=True)
+    api_key = os.getenv("LLM_API_KEY", "").strip()
+    base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1").strip()
+    actual_model = model if model != DEFAULT_MODEL else os.getenv("LLM_MODEL", DEFAULT_MODEL)
+    is_local = any(host in base_url for host in ("localhost", "127.0.0.1", "[::1]"))
+    if not api_key and not is_local:
+        raise RuntimeError(f"未找到 LLM_API_KEY，请在 Web 配置向导或 {_env_path} 中完成配置")
+    client = OpenAI(api_key=api_key or "local-no-key", base_url=base_url)
     last_error = None
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            response = _client.chat.completions.create(
-                model=model,
+            response = client.chat.completions.create(
+                model=actual_model,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 timeout=httpx.Timeout(120.0, connect=10.0),
@@ -82,6 +78,25 @@ def ask_llm(
                 ],
             )
             content = response.choices[0].message.content or ""
+            try:
+                usage = getattr(response, "usage", None)
+                usage_path = Path(os.environ.get("AI_STUDIO_DATA_DIR", str(_env_path.parent))) / ".agent_workspace" / "llm_usage.jsonl"
+                usage_path.parent.mkdir(parents=True, exist_ok=True)
+                entry = {
+                    "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
+                    "model": actual_model,
+                    "base_url": base_url,
+                    "duration_attempt": attempt,
+                    "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                    "completion_tokens": getattr(usage, "completion_tokens", None),
+                    "total_tokens": getattr(usage, "total_tokens", None),
+                    "prompt_chars": len(system_prompt) + len(user_prompt),
+                    "completion_chars": len(content),
+                }
+                with usage_path.open("a", encoding="utf-8") as file:
+                    file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
             return content.strip()
 
         except Exception as e:
