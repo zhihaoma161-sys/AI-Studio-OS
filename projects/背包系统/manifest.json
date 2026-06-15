@@ -2,15 +2,15 @@
   "schema_version": 1,
   "system_id": "背包系统",
   "system_name": "背包系统",
-  "lifecycle": "active",
-  "revision": 2,
+  "lifecycle": "deprecated",
+  "revision": 3,
   "created_at": "2026-06-08T17:35:19+08:00",
-  "updated_at": "2026-06-08T17:35:19+08:00",
+  "updated_at": "2026-06-15T17:37:28+08:00",
   "dependencies": [
     "邮件系统"
   ],
   "public_interfaces": [],
-  "latest_change": "legacy_migration",
+  "latest_change": "restored:r0003_20260615_161944",
   "history": [
     {
       "revision": 1,
@@ -29,6 +29,26 @@
         "task_plan.md",
         "tech_blueprint.md"
       ]
+    },
+    {
+      "revision": 2,
+      "id": "r0002_20260615_130501",
+      "timestamp": "2026-06-15T13:05:02+08:00",
+      "kind": "archive_replace",
+      "files": [
+        "audit_feedback.json",
+        "audit_trace_log.md",
+        "concept_brief.md",
+        "project_meta.json",
+        "system_design_detail.md",
+        "system_design_draft.md",
+        "system_numerical_data.json",
+        "system_numerical_docs.json",
+        "system_schema.json",
+        "task_plan.md",
+        "tech_blueprint.md"
+      ],
+      "requirement": "Workspace archive"
     }
   ]
 }

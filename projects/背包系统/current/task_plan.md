@@ -75,12 +75,12 @@ graph TD
     B --> D[Code Agent]
     C --> D
     D --> E[Audit Agent]
-
+    
     subgraph 并行阶段
         B
         C
     end
-
+    
     subgraph 串行阶段
         A --> 并行阶段
         并行阶段 --> D

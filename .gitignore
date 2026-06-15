@@ -5,5 +5,7 @@ __pycache__/
 dist/
 build/
 .venv/
+.agent_workspace/change_analysis_log.jsonl
+.agent_workspace/llm_usage.jsonl
 Excel/*
 !Excel/README.md

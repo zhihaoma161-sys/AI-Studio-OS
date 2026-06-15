@@ -38,6 +38,8 @@ def ask_llm(
     model: str = DEFAULT_MODEL,
     temperature: float = DEFAULT_TEMPERATURE,
     max_tokens: int = DEFAULT_MAX_TOKENS,
+    timeout_seconds: float = 120.0,
+    max_retries: int = MAX_RETRIES,
 ) -> str:
     """
     所有 Agent 调用大模型的唯一底层通道。
@@ -53,7 +55,7 @@ def ask_llm(
         LLM 响应的文本内容（已去除首尾空白）
 
     异常:
-        连续重试 MAX_RETRIES 次后仍失败则抛出 RuntimeError
+        连续尝试 max_retries 次后仍失败则抛出 RuntimeError
     """
     load_dotenv(dotenv_path=_env_path, override=True)
     api_key = os.getenv("LLM_API_KEY", "").strip()
@@ -65,13 +67,19 @@ def ask_llm(
     client = OpenAI(api_key=api_key or "local-no-key", base_url=base_url)
     last_error = None
 
-    for attempt in range(1, MAX_RETRIES + 1):
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be greater than zero")
+    if max_retries < 1:
+        raise ValueError("max_retries must be at least one")
+
+    for attempt in range(1, max_retries + 1):
+        started = time.perf_counter()
         try:
             response = client.chat.completions.create(
                 model=actual_model,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                timeout=httpx.Timeout(120.0, connect=10.0),
+                timeout=httpx.Timeout(timeout_seconds, connect=min(10.0, timeout_seconds)),
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -86,7 +94,8 @@ def ask_llm(
                     "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
                     "model": actual_model,
                     "base_url": base_url,
-                    "duration_attempt": attempt,
+                    "attempt": attempt,
+                    "duration_ms": round((time.perf_counter() - started) * 1000),
                     "prompt_tokens": getattr(usage, "prompt_tokens", None),
                     "completion_tokens": getattr(usage, "completion_tokens", None),
                     "total_tokens": getattr(usage, "total_tokens", None),
@@ -101,19 +110,19 @@ def ask_llm(
 
         except Exception as e:
             last_error = e
-            if attempt < MAX_RETRIES:
+            if attempt < max_retries:
                 wait = RETRY_DELAY * attempt
                 print(
                     f"[LLM Client] 第 {attempt} 次调用失败: {e}，"
-                    f"{wait} 秒后重试 (共 {MAX_RETRIES} 次)..."
+                    f"{wait} 秒后重试 (共 {max_retries} 次)..."
                 )
                 time.sleep(wait)
             else:
-                print(f"[LLM Client] 已重试 {MAX_RETRIES} 次，全部失败。")
+                print(f"[LLM Client] 已尝试 {max_retries} 次，全部失败。")
 
     # 所有重试耗尽
     raise RuntimeError(
-        f"LLM 调用失败，已重试 {MAX_RETRIES} 次。"
+        f"LLM 调用失败，已尝试 {max_retries} 次。"
         f"最后错误: {last_error}"
     )
 
@@ -123,29 +132,34 @@ def safe_extract_json(raw_text: str, agent_label: str = "LLM") -> tuple[str | No
     万能 JSON 剥壳器：从大模型原始返回中鲁棒提取纯 JSON 文本。
     
     策略（按优先级）：
-    1. 正则匹配第一个 { 到最后一个 } 或第一个 [ 到最后一个 ]
-    2. 兜底：返回原始文本
+    1. 校验并提取 Markdown JSON 代码块
+    2. 使用 JSONDecoder 从任意对象/数组起点解析首个有效 JSON
     
     返回 (json_string, error_message) — 成功时 error_message 为空。
     """
     if not raw_text or not raw_text.strip():
         return None, "[safe_extract_json] 输入文本为空"
 
-    # 策略1: 从第一个 { 到最后一个 } (对象) 或 [ 到 ] (数组)
-    # 使用贪婪匹配 .* 跨越所有中间内容
-    match = re.search(r'(\{.*\}|\[.*\])', raw_text, re.DOTALL)
-    if match:
-        extracted = match.group(1).strip()
-        print(f"[{agent_label}] 剥壳正则命中: 提取 JSON ({len(extracted)} 字符)")
-        return extracted, ""
-
-    # 策略2: 尝试 ```json ... ``` 代码块
+    # 策略1: 尝试 ```json ... ``` 代码块
     match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_text, re.DOTALL)
     if match:
         extracted = match.group(1).strip()
-        print(f"[{agent_label}] 代码块正则命中: 提取 JSON ({len(extracted)} 字符)")
-        return extracted, ""
+        try:
+            json.loads(extracted)
+            print(f"[{agent_label}] 代码块命中: 提取 JSON ({len(extracted)} 字符)")
+            return extracted, ""
+        except json.JSONDecodeError:
+            pass
 
-    # 兜底: 返回 raw 文本
-    print(f"[{agent_label}] 未找到任何结构化标记，使用原始文本")
-    return raw_text.strip(), ""
+    # 策略2: 从任意对象/数组起点尝试 JSONDecoder，避免贪婪正则把多个对象粘在一起。
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"[\{\[]", raw_text):
+        try:
+            _value, end = decoder.raw_decode(raw_text[match.start():])
+            extracted = raw_text[match.start():match.start() + end].strip()
+            print(f"[{agent_label}] JSONDecoder 命中: 提取 JSON ({len(extracted)} 字符)")
+            return extracted, ""
+        except json.JSONDecodeError:
+            continue
+
+    return None, f"[{agent_label}] 返回内容中未找到有效 JSON"

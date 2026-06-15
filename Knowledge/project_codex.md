@@ -3,15 +3,15 @@
 > 本文档仅从稳定归档项目与当前有效数值表生成。候选规范不会约束 Agent，只有人工批准的规范会生效。
 
 ## 系统清单
+- **背包系统** (`背包系统`) | 状态: deprecated | 修订: r5 | 最近变更: rollback:r0003_20260615_161944
+  - 依赖: 邮件系统
+  - 数值表: bag_item_list, item_config_table
 - **全品类美术图鉴** (`全品类美术图鉴`) | 状态: active | 修订: r1 | 最近变更: legacy_migration
   - 依赖: 邮件系统
   - 数值表: category_definition, category_progress, entry_display, entry_unlock, milestone_reward, sort_filter, system_linkage, total_progress
 - **活动大厅** (`活动大厅`) | 状态: active | 修订: r1 | 最近变更: legacy_migration
   - 依赖: 背包系统, 邮件系统
   - 数值表: activity_config, global_params
-- **背包系统** (`背包系统`) | 状态: active | 修订: r2 | 最近变更: legacy_migration
-  - 依赖: 邮件系统
-  - 数值表: bag_item_list, item_config_table
 - **角色外观自定义系统** (`角色外观自定义系统`) | 状态: active | 修订: r1 | 最近变更: legacy_migration
   - 依赖: 背包系统
   - 数值表: character_data, dye_system, item_definition

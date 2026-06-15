@@ -2,87 +2,33 @@
   "description": "全局资产注册表 — 记录所有业务数据表中的主键 ID 及其备注名",
   "entries": [
     {
-      "module": "base_expressions",
-      "field": "expression_id",
-      "id": "blink_01",
+      "module": "item_config_table",
+      "field": "category_id",
+      "id": "1",
       "display_name": null
     },
     {
-      "module": "base_expressions",
-      "field": "expression_id",
-      "id": "smile_01",
+      "module": "item_config_table",
+      "field": "category_id",
+      "id": "2",
       "display_name": null
     },
     {
-      "module": "base_poses",
-      "field": "pose_id",
-      "id": "sit_01",
+      "module": "item_config_table",
+      "field": "category_id",
+      "id": "3",
       "display_name": null
     },
     {
-      "module": "base_poses",
-      "field": "pose_id",
-      "id": "stand_01",
+      "module": "item_config_table",
+      "field": "category_id",
+      "id": "4",
       "display_name": null
     },
     {
-      "module": "free_filters",
-      "field": "filter_id",
-      "id": "cool_01",
-      "display_name": null
-    },
-    {
-      "module": "free_filters",
-      "field": "filter_id",
-      "id": "natural_01",
-      "display_name": null
-    },
-    {
-      "module": "free_filters",
-      "field": "filter_id",
-      "id": "soft_01",
-      "display_name": null
-    },
-    {
-      "module": "free_filters",
-      "field": "filter_id",
-      "id": "vintage_01",
-      "display_name": null
-    },
-    {
-      "module": "free_filters",
-      "field": "filter_id",
-      "id": "warm_01",
-      "display_name": null
-    },
-    {
-      "module": "scene_templates",
-      "field": "template_id",
-      "id": "balcony_01",
-      "display_name": null
-    },
-    {
-      "module": "scene_templates",
-      "field": "template_id",
-      "id": "bedroom_01",
-      "display_name": null
-    },
-    {
-      "module": "scene_templates",
-      "field": "template_id",
-      "id": "garden_01",
-      "display_name": null
-    },
-    {
-      "module": "scene_templates",
-      "field": "template_id",
-      "id": "pool_01",
-      "display_name": null
-    },
-    {
-      "module": "scene_templates",
-      "field": "template_id",
-      "id": "terrace_01",
+      "module": "item_config_table",
+      "field": "category_id",
+      "id": "5",
       "display_name": null
     }
   ]

@@ -52,8 +52,9 @@ body{display:flex;}
 
 /* ===== Projects ===== */
 .proj-folder{margin-bottom:2px;}
-.proj-header{padding:10px 15px;background:#f0f0f0;cursor:pointer;font-weight:bold;border-bottom:1px solid #ddd;user-select:none;}
+.proj-header{padding:10px 15px;background:#f0f0f0;font-weight:bold;border-bottom:1px solid #ddd;user-select:none;display:flex;align-items:center;gap:8px;}
 .proj-header:hover{background:#e0e0e0;}
+.proj-title{flex:1;cursor:pointer;}
 .proj-files{padding-left:25px;display:none;}
 .proj-files.open{display:block;}
 .proj-file{padding:8px 15px;cursor:pointer;border-bottom:1px solid #eee;font-size:13px;}
@@ -69,6 +70,27 @@ body{display:flex;}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:15px;}
 .settings-status{font-size:13px;color:#666;min-height:20px;margin-top:8px;}
 .standard-card{padding:10px;border-bottom:1px solid #ddd;background:#fafafa;}
+.iteration-card{border:2px solid #333;background:#fafafa;padding:18px;margin-bottom:16px;}
+.iteration-grid{display:grid;grid-template-columns:140px 1fr;gap:10px 15px;align-items:center;margin-bottom:16px;}
+.iteration-grid strong{font-size:14px;}
+.iteration-grid select{padding:10px;border:1px solid #777;background:#fff;font-size:14px;}
+.iteration-log{min-height:150px;max-height:280px;overflow-y:auto;border:2px solid #777;background:#fff;padding:12px;margin-bottom:12px;}
+.iteration-message{padding:9px 11px;margin-bottom:8px;border-left:4px solid #555;background:#f5f5f5;white-space:pre-wrap;line-height:1.5;}
+.iteration-message.requirement{border-left-color:#333;}
+.iteration-message.feedback{border-left-color:#e65100;background:#fff8f0;}
+.iteration-message small{display:block;color:#777;margin-bottom:4px;}
+.iteration-input{width:100%;min-height:100px;padding:12px;border:2px solid #555;resize:vertical;font-size:15px;line-height:1.6;}
+.iteration-actions{display:flex;gap:10px;margin-top:12px;}
+.primary-btn{padding:10px 18px;background:#333;color:#fff;border:1px solid #333;cursor:pointer;font-weight:bold;}
+.primary-btn:disabled{background:#aaa;border-color:#aaa;cursor:not-allowed;}
+.secondary-btn{padding:10px 18px;background:#fff;color:#333;border:1px solid #555;cursor:pointer;font-weight:bold;}
+.iteration-panel{border:1px solid #777;padding:16px;margin-top:18px;background:#fff;}
+.iteration-panel[hidden]{display:none;}
+.iteration-panel pre{white-space:pre-wrap;background:#f7f7f7;border:1px solid #ddd;padding:12px;margin-top:8px;max-height:260px;overflow:auto;font:13px/1.5 "Consolas","Courier New",monospace;}
+.iteration-status{min-height:24px;margin-top:12px;color:#555;font-weight:bold;white-space:pre-wrap;}
+.proj-file{display:flex;align-items:center;gap:8px;}
+.proj-file-name{flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.disabled-note{font-size:12px;color:#999;padding-right:4px;}
 </style>
 </head>
 <body>
@@ -79,6 +101,7 @@ body{display:flex;}
     <button class="nav-btn active" data-tab="write">设计项目</button>
     <button class="nav-btn" data-tab="memory">记忆积累</button>
     <button class="nav-btn" data-tab="history">存档项目</button>
+    <button class="nav-btn" data-tab="iterate">文档迭代</button>
     <button class="nav-btn" data-tab="config">配置表-待测试</button>
 </div>
 
@@ -91,7 +114,6 @@ body{display:flex;}
                     <option value="new">新建系统</option>
                     <option value="modify">修改已有系统</option>
                 </select>
-                <select id="modifyProject" style="display:none"></select>
                 <span id="changeStatus" style="font-size:13px;color:#666;"></span>
             </div>
             <div class="log-header">终端日志</div>
@@ -144,7 +166,52 @@ body{display:flex;}
     <div class="tab-content" id="tab-history">
         <div class="workspace" style="padding:20px 30px;">
             <div class="log-header">往期项目档案</div>
+            <div style="font-size:13px;color:#666;margin-bottom:12px;">展开系统，选中指定文档后点击“启动迭代”。审计、元数据等只读文档不支持直接迭代。</div>
             <div id="projectList" style="overflow-y:auto;flex:1;"></div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-iterate">
+        <div class="workspace" style="padding:20px 30px;">
+            <div class="log-header">归档文档迭代 <span style="font-size:12px;color:#777;font-weight:normal;">页面版本 20260615.5</span></div>
+            <div class="iteration-card">
+                <div class="iteration-grid">
+                    <strong>所属系统</strong>
+                    <select id="iterationProject">
+                        <option value="">请先选择归档系统</option>
+                    </select>
+                    <strong>指定文档</strong>
+                    <select id="iterationDocument">
+                        <option value="">请选择要迭代的文档</option>
+                    </select>
+                    <strong>迭代类型</strong>
+                    <select id="iterationType">
+                        <option value="">请选择本次需求类型</option>
+                        <option value="new_feature">新增功能</option>
+                        <option value="existing_feature">老功能迭代</option>
+                    </select>
+                </div>
+                <label class="mem-label">需求与修改意见日志</label>
+                <div class="iteration-log" id="iterationConversation"><div style="color:#999;">尚未输入需求</div></div>
+                <label class="mem-label" for="iterationInput">本次输入</label>
+                <textarea class="iteration-input" id="iterationInput" placeholder="首次输入基础修改需求；分析后继续在这里输入补充或纠正意见。"></textarea>
+                <div class="iteration-actions">
+                    <button class="primary-btn" id="iterationSubmitBtn" onclick="submitIterationMessage()">提交并分析</button>
+                    <button class="secondary-btn" onclick="returnToProjectHistory()">重新选择文档</button>
+                </div>
+                <div class="iteration-status" id="iterationStatus"></div>
+            </div>
+            <div class="iteration-panel" id="iterationAnalysis" hidden>
+                <h3>影响分析与变更预览</h3>
+                <pre id="iterationSummary"></pre>
+                <h4 style="margin-top:14px;">文本变更</h4>
+                <pre id="iterationTextPreview"></pre>
+                <h4 style="margin-top:14px;">数值变更</h4>
+                <pre id="iterationNumberPreview"></pre>
+                <div class="iteration-actions">
+                    <button class="primary-btn" id="iterationApplyBtn" onclick="applyIteration()" disabled>确认并启动迭代修改</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -196,6 +263,7 @@ body{display:flex;}
 <script>
 const API = window.location.origin;
 const WS_API = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
+const CLIENT_VERSION = '20260615.5';
 const STATE_LABELS = {
     "idle":"Idle","pending_classification":"分类中","clarifying_requirements":"追问中",
     "pending_design_approval":"草案审批","pending_plan_approval":"排期审批",
@@ -225,6 +293,7 @@ const fileList = document.getElementById('fileList');
 let ws = null, engineRunning = false, hitlActive = false;
 let lastLogLine = '', dupCount = 0;
 let llmConfigured = false, projectCache = [];
+let iterationContext = {analysis:null, requirement:'', messages:[]};
 const PROVIDER_DEFAULTS = {
     deepseek:['https://api.deepseek.com/v1','deepseek-chat'],
     openai:['https://api.openai.com/v1','gpt-4.1-mini'],
@@ -234,15 +303,18 @@ const PROVIDER_DEFAULTS = {
 };
 
 // Tabs
+function activateTab(tab) {
+    document.querySelectorAll('.nav-btn').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    if (tab === 'memory') { refreshKnowledge(); loadStandards(); }
+    if (tab === 'history') loadProjects();
+    if (tab === 'iterate' && !document.getElementById('iterationDocument').value) {
+        document.getElementById('iterationStatus').textContent = '请先从存档项目中选择一份可迭代文档。';
+    }
+}
 document.querySelectorAll('.nav-btn').forEach(b => {
-    b.onclick = () => {
-        document.querySelectorAll('.nav-btn').forEach(x => x.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-        document.getElementById('tab-' + b.dataset.tab).classList.add('active');
-        if (b.dataset.tab === 'memory') { refreshKnowledge(); loadStandards(); }
-        if (b.dataset.tab === 'history') loadProjects();
-    };
+    b.onclick = () => activateTab(b.dataset.tab);
 });
 
 // Engine
@@ -352,7 +424,8 @@ userInput.addEventListener('keydown', async function(e) {
         const text = userInput.value.trim();
         if (!text) return;
         if (document.getElementById('workMode').value === 'modify') {
-            await submitChangeRequest(text);
+            alert('修改已有系统需要先从存档项目中选择指定文档。');
+            activateTab('history');
         } else if (!engineRunning) {
             await fetch(API+'/api/concept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
             startEngine();
@@ -429,18 +502,22 @@ document.getElementById('archiveBtn').onclick = async () => {
 
 // ==================== 往期案子 ====================
 function toggleProj(el) {
-    const files = el.nextElementSibling;
+    const files = el.closest('.proj-folder').querySelector('.proj-files');
     files.classList.toggle('open');
+    el.textContent = files.classList.contains('open') ? '收起文档' : '展开文档';
 }
 
 async function loadProjects() {
     try {
         const d = await (await fetch(API + '/api/projects')).json();
         projectCache = d.projects;
-        refreshModifyProjects();
-        document.getElementById('projectList').innerHTML = d.projects.map(p => `
+        refreshIterationProjects();
+        document.getElementById('projectList').innerHTML = d.projects.length ? d.projects.map(p => `
             <div class="proj-folder">
-                <div class="proj-header" onclick="toggleProj(this)">📁 ${p.system_name} · r${p.revision} · ${p.lifecycle}</div>
+                <div class="proj-header">
+                    <span class="proj-title" onclick="openProjectFolder('${p.system_id}')">📁 ${p.system_name} · r${p.revision} · ${p.lifecycle}</span>
+                    <button class="mini-btn" onclick="toggleProj(this)">展开文档</button>
+                </div>
                 <div class="history-meta">最近变更：${p.latest_change||'无'} · 历史快照：${p.history_count}
                     ${p.history && p.history.length ? `<button class="mini-btn" onclick="event.stopPropagation();rollbackProject('${p.system_id}','${p.history[p.history.length-1].id}')">回滚上一版</button>`:''}
                     <button class="mini-btn" onclick="event.stopPropagation();setLifecycle('${p.system_id}','active')">设为正常</button>
@@ -448,9 +525,17 @@ async function loadProjects() {
                     <button class="mini-btn" onclick="event.stopPropagation();setLifecycle('${p.system_id}','deleted')">标记删除</button>
                 </div>
                 <div class="proj-files">
-                    ${p.files.map(f => `<div class="proj-file" onclick="openProjectFile('${p.system_id}','${f}')">📄 ${f}</div>`).join('')}
+                    ${p.files.map(f => {
+                        const iterable = (p.iterable_files||[]).includes(f);
+                        return `<div class="proj-file">
+                            <span class="proj-file-name" onclick="openProjectFile('${p.system_id}','${f}')">📄 ${LABEL_MAP[f]||f}</span>
+                            ${iterable
+                                ? `<button class="mini-btn" onclick="startDocumentIteration('${p.system_id}','${f}')">启动迭代</button>`
+                                : '<span class="disabled-note">仅查看</span>'}
+                        </div>`;
+                    }).join('')}
                 </div>
-            </div>`).join('');
+            </div>`).join('') : '<div style="color:#999;">暂无已归档系统</div>';
     } catch(e) {}
 }
 
@@ -462,36 +547,241 @@ async function openProjectFile(systemId, filename) {
     }).catch(() => {});
 }
 
+async function openProjectFolder(systemId) {
+    const result = await readApiJson(await fetch(API + '/api/open_project_folder', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({system_id: systemId})
+    }));
+    if (!result.ok) alert(apiErrorMessage(result, '打开项目目录失败'));
+}
+
 document.getElementById('workMode').onchange = async e => {
     const modifying = e.target.value === 'modify';
-    document.getElementById('modifyProject').style.display = modifying ? 'inline-block' : 'none';
-    userInput.placeholder = modifying ? '输入对已有系统的修改需求，Enter 后先进行影响分析...' : '输入需求后按 Enter 提交...';
-    if (modifying) await loadProjects();
+    document.getElementById('changeStatus').textContent = modifying ? '请从存档项目选择指定文档后启动迭代' : '';
+    userInput.placeholder = modifying ? '请先从存档项目选择指定文档...' : '输入需求后按 Enter 提交...';
+    if (modifying) activateTab('history');
 };
-function refreshModifyProjects() {
-    const select = document.getElementById('modifyProject');
-    select.innerHTML = projectCache.filter(p=>p.lifecycle!=='deleted').map(p=>`<option value="${p.system_id}">${p.system_name} · r${p.revision}</option>`).join('');
+
+function refreshIterationProjects(preferredSystemId='') {
+    const projectSelect = document.getElementById('iterationProject');
+    const savedSystemId = preferredSystemId || projectSelect.value || sessionStorage.getItem('iterationSystemId') || '';
+    projectSelect.innerHTML = '<option value="">请先选择归档系统</option>' +
+        projectCache.filter(p=>p.lifecycle!=='deleted').map(p=>`<option value="${p.system_id}">${p.system_name} · r${p.revision}</option>`).join('');
+    if (projectCache.some(p=>p.system_id===savedSystemId && p.lifecycle!=='deleted')) {
+        projectSelect.value = savedSystemId;
+    }
+    refreshIterationDocuments();
 }
-async function submitChangeRequest(requirement) {
-    const systemId = document.getElementById('modifyProject').value;
-    if (!systemId) return alert('请先选择要修改的系统');
-    const status = document.getElementById('changeStatus');
-    status.textContent='正在分析影响范围...';
-    const analysis = await (await fetch(API+'/api/changes/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_id:systemId,requirement})})).json();
-    if (!analysis.ok) { status.textContent='分析失败'; return alert(analysis.error||'分析失败'); }
-    const textPreview=(analysis.preview?.text_changes||[]).map(x=>`[${x.file} @ ${x.anchor||'定位章节'}]\n${x.content}${x.deprecated?`\n废弃：${x.deprecated}`:''}`).join('\n\n');
-    const numberPreview=(analysis.preview?.numerical_operations||[]).map(x=>JSON.stringify(x)).join('\n');
-    const message = `影响文件：${analysis.affected_files.join(', ')||'无'}\n执行 Agent：${analysis.affected_agents.join(', ')||'无'}\n依赖系统：${analysis.dependent_systems.join(', ')||'无'}\n\n文本变更预览：\n${textPreview||'无'}\n\n数值变更预览：\n${numberPreview||'无'}\n\n确认应用以上局部修改并执行终审？`;
-    if (!confirm(message)) { status.textContent='已取消应用'; return; }
-    status.textContent='正在应用并终审...';
-    const result = await (await fetch(API+'/api/changes/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_id:systemId,change_id:analysis.change_id})})).json();
-    status.textContent=result.ok?`修改完成：r${result.revision}`:'修改失败';
-    if (!result.ok) alert(result.error||'修改失败');
-    userInput.value='';
-    await loadProjects();
+
+function refreshIterationDocuments(preferredFilename='') {
+    const systemId = document.getElementById('iterationProject').value;
+    const documentSelect = document.getElementById('iterationDocument');
+    const project = projectCache.find(p=>p.system_id===systemId);
+    const savedFilename = preferredFilename || documentSelect.value || sessionStorage.getItem('iterationFilename') || '';
+    const files = project?.iterable_files || [];
+    documentSelect.innerHTML = '<option value="">请选择要迭代的文档</option>' +
+        files.map(f=>`<option value="${f}">${LABEL_MAP[f]||f} (${f})</option>`).join('');
+    if (files.includes(savedFilename)) documentSelect.value = savedFilename;
+    sessionStorage.setItem('iterationSystemId', systemId);
+    sessionStorage.setItem('iterationFilename', documentSelect.value);
 }
+
+function selectedIterationTarget() {
+    const systemId = document.getElementById('iterationProject').value;
+    const filename = document.getElementById('iterationDocument').value;
+    const project = projectCache.find(p=>p.system_id===systemId);
+    return {systemId, filename, systemName:project?.system_name || systemId};
+}
+
+function startDocumentIteration(systemId, filename) {
+    const project = projectCache.find(p => p.system_id === systemId);
+    if (!project || !(project.iterable_files||[]).includes(filename)) {
+        return alert('该文档不支持直接迭代，请选择策划、技术、UX 或数值数据文档。');
+    }
+    resetIterationConversation('');
+    refreshIterationProjects(systemId);
+    refreshIterationDocuments(filename);
+    document.getElementById('iterationType').value = '';
+    activateTab('iterate');
+    document.getElementById('iterationType').focus();
+}
+
+function returnToProjectHistory() {
+    activateTab('history');
+}
+
+function clearIterationAnalysis(statusText='需求或类型有变化，请重新分析。') {
+    iterationContext.analysis = null;
+    document.getElementById('iterationAnalysis').hidden = true;
+    document.getElementById('iterationApplyBtn').disabled = true;
+    document.getElementById('iterationStatus').textContent = statusText;
+}
+
+function resetIterationConversation(statusText='') {
+    iterationContext = {analysis:null, requirement:'', messages:[]};
+    document.getElementById('iterationInput').value = '';
+    renderIterationConversation();
+    clearIterationAnalysis(statusText);
+    document.getElementById('iterationSubmitBtn').textContent = '提交并分析';
+}
+
+function renderIterationConversation() {
+    const log = document.getElementById('iterationConversation');
+    log.innerHTML = iterationContext.messages.length
+        ? iterationContext.messages.map((item, index) => `
+            <div class="iteration-message ${item.kind}">
+                <small>${index + 1}. ${item.kind === 'requirement' ? '基础修改需求' : '补充修改意见'}</small>
+                ${escapeHtml(item.content)}
+            </div>`).join('')
+        : '<div style="color:#999;">尚未输入需求</div>';
+    log.scrollTop = log.scrollHeight;
+}
+
+function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, char => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+    })[char]);
+}
+
+async function submitIterationMessage() {
+    const target = selectedIterationTarget();
+    if (!target.systemId || !target.filename) return alert('请先选择要迭代的归档文档。');
+    if (!document.getElementById('iterationType').value) return alert('请说明本次需求是新增功能还是老功能迭代。');
+    const input = document.getElementById('iterationInput');
+    const content = input.value.trim();
+    if (!content) return alert('请输入基础修改需求或补充修改意见。');
+    const isInitial = !iterationContext.requirement;
+    if (isInitial) iterationContext.requirement = content;
+    iterationContext.messages.push({kind:isInitial ? 'requirement' : 'feedback', content});
+    input.value = '';
+    renderIterationConversation();
+    document.getElementById('iterationSubmitBtn').textContent = '提交补充意见并重新分析';
+    await analyzeIteration({
+        requirement:iterationContext.requirement,
+        feedback:isInitial ? '' : content,
+        previousChangeId:iterationContext.analysis?.change_id || '',
+    });
+}
+
+async function readApiJson(response) {
+    const raw = await response.text();
+    try {
+        return JSON.parse(raw);
+    } catch(e) {
+        return {
+            ok:false,
+            error:`服务返回了无法识别的响应（HTTP ${response.status}）`,
+            detail:raw.slice(0,500),
+        };
+    }
+}
+
+function apiErrorMessage(result, fallback) {
+    const parts = [result?.error || fallback];
+    if (result?.detail && result.detail !== result.error) parts.push('详细错误：' + result.detail);
+    if (result?.trace_id) parts.push('追踪编号：' + result.trace_id);
+    return parts.join('\n');
+}
+
+async function analyzeIteration(options={}) {
+    const target = selectedIterationTarget();
+    if (!target.systemId || !target.filename) {
+        return alert('请先从存档项目中选择要迭代的文档。');
+    }
+    const changeType = document.getElementById('iterationType').value;
+    const requirement = options.requirement || iterationContext.requirement;
+    if (!changeType) return alert('请说明本次需求是新增功能还是老功能迭代。');
+    if (!requirement) return alert('请输入本次迭代需求。');
+
+    const status = document.getElementById('iterationStatus');
+    const submitBtn = document.getElementById('iterationSubmitBtn');
+    const previousAnalysis = iterationContext.analysis;
+    submitBtn.disabled = true;
+    status.textContent = options.previousChangeId ? '正在根据修改意见重新分析...' : '正在分析影响范围并生成局部修改方案...';
+    try {
+        const response = await fetch(API+'/api/changes/analyze',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+                client_version:CLIENT_VERSION,
+                system_id:target.systemId,
+                selected_document:target.filename,
+                change_type:changeType,
+                requirement,
+                analysis_feedback:options.feedback || '',
+                previous_change_id:options.previousChangeId || '',
+            })
+        });
+        const analysis = await readApiJson(response);
+        if (!analysis.ok) throw new Error(apiErrorMessage(analysis, '分析失败'));
+        iterationContext.analysis = analysis;
+        iterationContext.requirement = analysis.requirement;
+        if (Array.isArray(analysis.discussion)) {
+            iterationContext.messages = analysis.discussion.map(item=>({
+                kind:item.kind === 'feedback' ? 'feedback' : 'requirement',
+                content:item.content,
+            }));
+            renderIterationConversation();
+        }
+        const typeLabel = changeType === 'new_feature' ? '新增功能' : '老功能迭代';
+        document.getElementById('iterationSummary').textContent =
+            `迭代类型：${typeLabel}\n指定文档：${analysis.selected_document}\n本轮补充意见：${analysis.analysis_feedback||'无'}\n可写文件：${analysis.writable_files.join(', ')||'无'}\n只读参考：${analysis.reference_files.join(', ')||'无'}\n执行 Agent：${analysis.affected_agents.join(', ')||'无'}\n依赖系统：${analysis.dependent_systems.join(', ')||'无'}\n方案警告：${(analysis.proposal_warnings||[]).join('；')||'无'}\n分析耗时：${analysis.duration_ms} ms\n追踪编号：${analysis.trace_id}`;
+        document.getElementById('iterationTextPreview').textContent =
+            (analysis.preview?.text_changes||[]).map(x=>`[${x.file} @ ${x.anchor||'定位章节'}]\n${x.content}${x.deprecated?`\n废弃：${x.deprecated}`:''}`).join('\n\n') || '无文本变更';
+        document.getElementById('iterationNumberPreview').textContent =
+            (analysis.preview?.numerical_operations||[]).map(x=>JSON.stringify(x,null,2)).join('\n\n') || '无数值变更';
+        document.getElementById('iterationAnalysis').hidden = false;
+        document.getElementById('iterationApplyBtn').disabled = Boolean(analysis.proposal_incomplete);
+        status.textContent = analysis.proposal_incomplete
+            ? '当前方案存在已知遗漏，请在下方输入框继续补充意见。'
+            : '影响分析完成，请核对预览后启动迭代修改。';
+    } catch(e) {
+        iterationContext.analysis = previousAnalysis;
+        document.getElementById('iterationStatus').textContent = '分析失败：' + e.message;
+    } finally {
+        submitBtn.disabled = false;
+    }
+}
+
+async function applyIteration() {
+    const analysis = iterationContext.analysis;
+    if (!analysis) return alert('请先完成影响分析。');
+    if (!confirm('确认按当前预览修改指定归档文档，并执行跨文档终审？')) return;
+    const status = document.getElementById('iterationStatus');
+    const applyBtn = document.getElementById('iterationApplyBtn');
+    applyBtn.disabled = true;
+    status.textContent = '正在应用局部修改并执行最终审计...';
+    try {
+        const target = selectedIterationTarget();
+        const response = await fetch(API+'/api/changes/apply',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({system_id:target.systemId,change_id:analysis.change_id})
+        });
+        const result = await readApiJson(response);
+        if (!result.ok) throw new Error(apiErrorMessage(result, '修改失败'));
+        status.textContent = `迭代修改完成：${target.systemName} r${result.revision}`;
+        iterationContext.analysis = null;
+        await loadProjects();
+    } catch(e) {
+        status.textContent = '修改失败：' + e.message;
+        applyBtn.disabled = false;
+    }
+}
+document.getElementById('iterationType').addEventListener('change', () => {
+    if (iterationContext.messages.length) resetIterationConversation('已切换迭代类型，请重新输入基础修改需求。');
+});
+document.getElementById('iterationProject').addEventListener('change', () => {
+    refreshIterationDocuments('');
+    resetIterationConversation('已切换系统，请选择要迭代的文档。');
+});
+document.getElementById('iterationDocument').addEventListener('change', e => {
+    sessionStorage.setItem('iterationFilename', e.target.value);
+    resetIterationConversation(e.target.value ? '已选择文档，请输入基础修改需求。' : '请选择要迭代的文档。');
+});
 async function rollbackProject(systemId, historyId) {
-    if (!confirm('确认回滚到该历史快照？当前版本也会自动备份。')) return;
+    if (!confirm('确认回到该历史版本？当前版本之后的可见历史将被移除，且不会生成新版本。')) return;
     const result = await (await fetch(API+`/api/projects/${encodeURIComponent(systemId)}/rollback`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({history_id:historyId})})).json();
     alert(result.ok?'回滚完成':'回滚失败：'+(result.error||''));
     loadProjects();
@@ -604,6 +894,7 @@ if (document.getElementById('tableAllFiles')) refreshTableFiles();
 setInterval(refreshTableFiles, 1500);
 
 fetchFiles();
+loadProjects();
 </script>
 </body>
 </html>

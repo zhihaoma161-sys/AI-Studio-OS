@@ -11,6 +11,7 @@ import subprocess
 import time
 import asyncio
 import threading
+import uuid
 from datetime import datetime
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -33,7 +34,7 @@ from Skills.project_store import (
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BUNDLE_DIR = ROOT_DIR
-DATA_DIR = ROOT_DIR
+DATA_DIR = os.path.abspath(os.environ.get("AI_STUDIO_DATA_DIR", ROOT_DIR))
 
 WS_DIR = os.path.join(DATA_DIR, ".agent_workspace")
 KNOWLEDGE_DIR = os.path.join(DATA_DIR, "Knowledge")
@@ -44,6 +45,7 @@ CONCEPT_FILE = os.path.join(WS_DIR, "concept_brief.md")
 PROMPT_FILE = os.path.join(WS_DIR, ".web_prompt.json")
 RESPONSE_FILE = os.path.join(WS_DIR, ".web_response.json")
 LOG_FILE = os.path.join(WS_DIR, ".web_log.jsonl")
+CHANGE_ANALYSIS_LOG = os.path.join(WS_DIR, "change_analysis_log.jsonl")
 
 FRAMEWORK_FILES = {
     "blueprint.json", "active_schema.json", "current_result.json",
@@ -53,6 +55,7 @@ FRAMEWORK_FILES = {
 
 HOST = os.environ.get("AI_STUDIO_HOST", "127.0.0.1")
 PORT = int(os.environ.get("AI_STUDIO_PORT", "8080"))
+WEB_CLIENT_VERSION = "20260615.5"
 _default_origins = f"http://localhost:{PORT},http://127.0.0.1:{PORT}"
 ALLOWED_ORIGINS = {
     origin.strip()
@@ -91,6 +94,44 @@ def _safe_child(base_dir: str, *parts: str) -> str | None:
     except ValueError:
         return None
     return candidate
+
+
+def _log_change_analysis(event: str, trace_id: str, **data):
+    try:
+        os.makedirs(WS_DIR, exist_ok=True)
+        entry = {
+            "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "event": event,
+            "trace_id": trace_id,
+            **data,
+        }
+        with open(CHANGE_ANALYSIS_LOG, "a", encoding="utf-8") as file:
+            file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _change_error_response(exc: Exception, trace_id: str) -> JSONResponse:
+    detail = str(exc) or exc.__class__.__name__
+    lowered = detail.lower()
+    if "timeout" in lowered or "timed out" in lowered:
+        message = "模型响应超时，请缩小需求范围后重试，或检查 API 服务状态。"
+        status_code = 504
+    elif isinstance(exc, (ValueError, FileNotFoundError)):
+        message = detail
+        status_code = 400
+    elif "json" in lowered:
+        message = "模型返回的修改方案格式不完整，请重新分析。"
+        status_code = 502
+    else:
+        message = "增量修改方案生成失败，请根据详细错误检查 API 配置或需求范围。"
+        status_code = 502
+    return JSONResponse({
+        "ok": False,
+        "error": message,
+        "detail": detail[:1000],
+        "trace_id": trace_id,
+    }, status_code=status_code)
 
 
 # ==================== REST API ====================
@@ -323,18 +364,95 @@ async def api_open_project_file(data: dict):
     return JSONResponse({"ok": True})
 
 
-@app.post("/api/changes/analyze")
-def api_analyze_change(data: dict):
+@app.post("/api/open_project_folder")
+async def api_open_project_folder(data: dict):
     try:
-        result = analyze_change(
-            DATA_DIR,
-            str(data.get("system_id", "")),
-            str(data.get("requirement", "")),
-            generate_proposal=True,
-        )
-        return JSONResponse({"ok": True, **result})
+        system_id = str(data.get("system_id", "")).strip()
+        project_dir, _manifest = get_project(DATA_DIR, system_id)
+        current = project_dir / "current"
+        if not current.is_dir():
+            return JSONResponse({"ok": False, "error": "项目当前文档目录不存在"}, status_code=404)
+        abs_path = str(current.resolve())
+        if sys.platform == "win32":
+            os.startfile(abs_path)
+        elif sys.platform == "darwin":
+            subprocess.call(["open", abs_path])
+        else:
+            subprocess.call(["xdg-open", abs_path])
+        return JSONResponse({"ok": True, "path": abs_path})
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+
+@app.post("/api/changes/analyze")
+def api_analyze_change(data: dict):
+    trace_id = f"ana_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    started = time.perf_counter()
+    system_id = str(data.get("system_id", ""))
+    selected_document = str(
+        data.get("selected_document")
+        or data.get("document")
+        or data.get("filename")
+        or data.get("file")
+        or ""
+    ).strip()
+    change_type = str(data.get("change_type") or data.get("iteration_type") or "").strip()
+    client_version = str(data.get("client_version", "")).strip()
+    requirement = str(data.get("requirement", ""))
+    analysis_feedback = str(data.get("analysis_feedback", "")).strip()
+    previous_change_id = str(data.get("previous_change_id", "")).strip()
+    _log_change_analysis(
+        "started",
+        trace_id,
+        system_id=system_id,
+        selected_document=selected_document,
+        change_type=change_type,
+        client_version=client_version,
+        payload_keys=sorted(str(key) for key in data.keys()),
+        requirement_chars=len(requirement),
+        feedback_chars=len(analysis_feedback),
+        previous_change_id=previous_change_id,
+    )
+    try:
+        if client_version and client_version != WEB_CLIENT_VERSION:
+            raise ValueError(
+                f"当前页面版本为 {client_version}，服务端版本为 {WEB_CLIENT_VERSION}。"
+                "请刷新浏览器页面后重新选择文档。"
+            )
+        if not client_version and not selected_document and not change_type:
+            raise ValueError("当前页面版本过旧，未发送文档和迭代类型。请刷新浏览器页面后重新选择文档。")
+        if not selected_document:
+            raise ValueError("请先选择要迭代的归档文档")
+        if not change_type:
+            raise ValueError("请说明本次需求是新增功能还是老功能迭代")
+        result = analyze_change(
+            DATA_DIR,
+            system_id,
+            requirement,
+            generate_proposal=True,
+            selected_document=selected_document,
+            change_type=change_type,
+            analysis_feedback=analysis_feedback,
+            previous_change_id=previous_change_id,
+        )
+        duration_ms = round((time.perf_counter() - started) * 1000)
+        _log_change_analysis(
+            "completed",
+            trace_id,
+            duration_ms=duration_ms,
+            affected_files=result.get("affected_files", []),
+            writable_files=result.get("writable_files", []),
+        )
+        return JSONResponse({"ok": True, "trace_id": trace_id, "duration_ms": duration_ms, **result})
+    except Exception as exc:
+        _log_change_analysis(
+            "failed",
+            trace_id,
+            duration_ms=round((time.perf_counter() - started) * 1000),
+            error_type=exc.__class__.__name__,
+            error=str(exc)[:2000],
+        )
+        return _change_error_response(exc, trace_id)
 
 
 @app.post("/api/changes/apply")
@@ -563,7 +681,15 @@ async def ws_terminal(websocket: WebSocket):
 
 @app.get("/")
 async def root():
-    return FileResponse(os.path.join(BUNDLE_DIR, "index.html"))
+    return FileResponse(
+        os.path.join(BUNDLE_DIR, "index.html"),
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "X-AI-Studio-Client-Version": WEB_CLIENT_VERSION,
+        },
+    )
 
 
 # ==================== Startup ====================
@@ -574,7 +700,7 @@ if __name__ == "__main__":
     import socket
     import threading as _threading
 
-    URL = f"http://localhost:{PORT}"
+    URL = f"http://localhost:{PORT}/?v={WEB_CLIENT_VERSION}"
 
     # 端口检测
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

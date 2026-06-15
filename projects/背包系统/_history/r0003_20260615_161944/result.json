@@ -1,0 +1,36 @@
+{
+  "ok": true,
+  "change_id": "chg_20260615_160521_588e53",
+  "revision": 4,
+  "change_type": "new_feature",
+  "selected_document": "system_design_draft.md",
+  "text_files": [
+    "system_design_draft.md",
+    "system_design_draft.md",
+    "ui_interaction_blueprint.md",
+    "ui_interaction_blueprint.md"
+  ],
+  "numerical_changes": [],
+  "excel_tables": [],
+  "audit": {
+    "deterministic": {
+      "ok": true,
+      "issues": [],
+      "audited_at": "2026-06-15T16:19:40+08:00",
+      "source": "deterministic_final_audit"
+    },
+    "semantic": {
+      "ok": true,
+      "issues": [],
+      "audited_at": "2026-06-15T16:19:44+08:00",
+      "source": "llm_cross_document_final_audit"
+    }
+  },
+  "history_id": "r0003_20260615_161944",
+  "duration_ms": 4071,
+  "agents": [
+    "lead_planner",
+    "ux_agent"
+  ],
+  "token_usage": null
+}

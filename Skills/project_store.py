@@ -32,6 +32,7 @@ ARCHIVE_FILES = {
 }
 
 TEXT_TARGETS = {
+    "concept_brief.md": "lead_planner",
     "system_design_draft.md": "lead_planner",
     "system_design_detail.md": "system_planner",
     "task_plan.md": "task_planner",
@@ -47,6 +48,9 @@ NUMERICAL_OPERATIONS = {
     "delete_rows",
     "delete_column",
 }
+
+CHANGE_TYPES = {"new_feature", "existing_feature"}
+ITERABLE_TARGETS = set(TEXT_TARGETS) | {"system_numerical_data.json"}
 
 LEGACY_PATTERN = re.compile(r"^(?P<name>.+)_(?P<timestamp>\d{8}_\d{6})$")
 HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
@@ -242,12 +246,36 @@ def list_stable_projects(data_dir: str | Path) -> list[dict[str, Any]]:
         manifest = _read_json(_manifest_path(project_dir), None)
         if not isinstance(manifest, dict):
             continue
+        manifest = _repair_legacy_rollback_manifest(project_dir, manifest)
         files = sorted(path.name for path in _current_dir(project_dir).iterdir()) if _current_dir(project_dir).is_dir() else []
         item = dict(manifest)
         item["files"] = files
+        item["iterable_files"] = sorted(filename for filename in files if filename in ITERABLE_TARGETS)
         item["history_count"] = len(manifest.get("history", []))
         result.append(item)
     return sorted(result, key=lambda item: item.get("updated_at", ""), reverse=True)
+
+
+def _repair_legacy_rollback_manifest(project_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    latest_change = str(manifest.get("latest_change", ""))
+    if not latest_change.startswith("rollback:"):
+        return manifest
+    target_id = latest_change.removeprefix("rollback:")
+    target = next((entry for entry in manifest.get("history", []) if entry.get("id") == target_id), None)
+    if not isinstance(target, dict) or not (_history_dir(project_dir) / target_id / "snapshot").is_dir():
+        return manifest
+    target_revision = int(target.get("revision", 0))
+    project_meta = _read_json(_current_dir(project_dir) / "project_meta.json", {})
+    if not isinstance(project_meta, dict) or project_meta.get("version") != f"r{target_revision}":
+        return manifest
+    manifest["revision"] = target_revision
+    manifest["latest_change"] = f"restored:{target_id}"
+    manifest["history"] = [
+        entry for entry in manifest.get("history", [])
+        if int(entry.get("revision", 0)) < target_revision
+    ]
+    _write_json(_manifest_path(project_dir), manifest)
+    return manifest
 
 
 def get_project(data_dir: str | Path, system_id: str) -> tuple[Path, dict[str, Any]]:
@@ -340,26 +368,71 @@ def _headings(path: Path) -> list[str]:
     return [match.group(2).strip() for match in HEADING_PATTERN.finditer(_read_text(path))]
 
 
-def _select_targets(requirement: str, current: Path) -> tuple[list[str], list[str], list[str]]:
-    text = requirement.lower()
-    targets: set[str] = {"system_design_detail.md"}
-    agents: set[str] = {"system_planner"}
+NEGATED_IMPACT_MARKERS = (
+    "不涉及", "无需", "无须", "不需要", "不用", "不修改", "不调整",
+    "不改", "不包含", "不影响", "排除", "禁止", "不得", "避免",
+)
+POSITIVE_NEGATION_OVERRIDES = ("不要遗漏", "不得遗漏", "不能遗漏", "不可遗漏")
+
+
+def _has_positive_keyword(text: str, keywords: tuple[str, ...]) -> bool:
+    for keyword in keywords:
+        start = 0
+        while True:
+            index = text.find(keyword, start)
+            if index < 0:
+                break
+            prefix = text[max(0, index - 10):index]
+            negated = any(marker in prefix for marker in NEGATED_IMPACT_MARKERS)
+            overridden = any(marker in prefix for marker in POSITIVE_NEGATION_OVERRIDES)
+            if not negated or overridden:
+                return True
+            start = index + len(keyword)
+    return False
+
+
+def _select_targets(
+    requirement: str,
+    current: Path,
+    selected_document: str | None = None,
+    analysis_feedback: str = "",
+) -> tuple[list[str], list[str], list[str]]:
+    text = f"{requirement}\n{analysis_feedback}".lower()
+    targets: set[str] = set()
+    agents: set[str] = set()
     tables: set[str] = set()
 
-    keyword_targets = {
-        "数值": ({"system_numerical_data.json", "system_numerical_docs.json"}, {"numerical_planner"}),
-        "配置": ({"system_numerical_data.json", "system_numerical_docs.json"}, {"numerical_planner"}),
-        "表": ({"system_numerical_data.json", "system_numerical_docs.json"}, {"numerical_planner"}),
-        "接口": ({"system_schema.json", "tech_blueprint.md"}, {"schema_translator", "tech_architect"}),
-        "程序": ({"tech_blueprint.md"}, {"tech_architect"}),
-        "技术": ({"tech_blueprint.md"}, {"tech_architect"}),
-        "ui": ({"ui_interaction_blueprint.md"}, {"ux_agent"}),
-        "界面": ({"ui_interaction_blueprint.md"}, {"ux_agent"}),
-        "交互": ({"ui_interaction_blueprint.md"}, {"ux_agent"}),
-        "排期": ({"task_plan.md"}, {"task_planner"}),
-    }
-    for keyword, (files, owners) in keyword_targets.items():
-        if keyword in text:
+    if selected_document:
+        if selected_document not in ITERABLE_TARGETS:
+            raise ValueError(f"Document does not support incremental iteration: {selected_document}")
+        if not (current / selected_document).is_file():
+            raise FileNotFoundError(f"Selected document not found: {selected_document}")
+        targets.add(selected_document)
+        if selected_document in TEXT_TARGETS:
+            agents.add(TEXT_TARGETS[selected_document])
+        elif selected_document == "system_numerical_data.json":
+            agents.add("numerical_planner")
+    else:
+        targets.add("system_design_detail.md")
+        agents.add("system_planner")
+
+    impact_domains = (
+        (
+            (
+                "数值", "配置", "参数", "字段", "列", "表", "价格", "定价", "成本", "收益",
+                "奖励", "概率", "几率", "权重", "掉落", "产出", "消耗", "货币", "兑换",
+                "购买", "买入", "出售", "卖出", "售价", "容量", "上限", "数量", "倍率",
+                "成长", "属性", "冷却", "时长",
+            ),
+            {"system_numerical_data.json", "system_numerical_docs.json"},
+            {"numerical_planner"},
+        ),
+        (("接口", "协议", "schema", "程序", "技术", "服务端", "客户端"), {"system_schema.json", "tech_blueprint.md"}, {"schema_translator", "tech_architect"}),
+        (("ui", "界面", "交互", "弹窗", "按钮", "表现"), {"ui_interaction_blueprint.md"}, {"ux_agent"}),
+        (("排期", "任务", "工期", "里程碑"), {"task_plan.md"}, {"task_planner"}),
+    )
+    for keywords, files, owners in impact_domains:
+        if _has_positive_keyword(text, keywords):
             targets.update(files)
             agents.update(owners)
 
@@ -394,6 +467,10 @@ def analyze_change(
     system_id: str,
     requirement: str,
     generate_proposal: bool = False,
+    selected_document: str | None = None,
+    change_type: str = "existing_feature",
+    analysis_feedback: str = "",
+    previous_change_id: str = "",
 ) -> dict[str, Any]:
     project_dir, manifest = get_project(data_dir, system_id)
     if manifest.get("lifecycle") == "deleted":
@@ -401,8 +478,31 @@ def analyze_change(
     requirement = requirement.strip()
     if not requirement:
         raise ValueError("Requirement is empty")
+    if change_type not in CHANGE_TYPES:
+        raise ValueError("Change type must be new_feature or existing_feature")
 
-    targets, agents, tables = _select_targets(requirement, _current_dir(project_dir))
+    analysis_feedback = analysis_feedback.strip()
+    previous_analysis = None
+    if previous_change_id:
+        if not re.fullmatch(r"chg_[A-Za-z0-9_]+", previous_change_id):
+            raise ValueError("Invalid previous change id")
+        previous_analysis = _read_json(_pending_dir(project_dir) / f"{previous_change_id}.json", None)
+        if not isinstance(previous_analysis, dict):
+            raise FileNotFoundError(f"上一轮分析记录已丢失: {previous_change_id}")
+
+    if isinstance(previous_analysis, dict) and isinstance(previous_analysis.get("discussion"), list):
+        discussion = list(previous_analysis["discussion"])
+    else:
+        discussion = [{"kind": "requirement", "content": requirement, "created_at": _now()}]
+    if analysis_feedback:
+        discussion.append({"kind": "feedback", "content": analysis_feedback, "created_at": _now()})
+
+    targets, agents, tables = _select_targets(
+        requirement,
+        _current_dir(project_dir),
+        selected_document,
+        analysis_feedback,
+    )
     anchors = {
         target: _headings(_current_dir(project_dir) / target)[:30]
         for target in targets if target.endswith(".md")
@@ -415,8 +515,16 @@ def analyze_change(
         "system_id": system_id,
         "system_name": manifest.get("system_name", system_id),
         "requirement": requirement,
+        "analysis_feedback": analysis_feedback,
+        "discussion": discussion,
+        "previous_change_id": previous_change_id or None,
+        "previous_preview": previous_analysis.get("preview") if isinstance(previous_analysis, dict) else None,
+        "change_type": change_type,
+        "selected_document": selected_document,
         "created_at": _now(),
         "affected_files": targets,
+        "writable_files": [target for target in targets if target in ITERABLE_TARGETS],
+        "reference_files": [target for target in targets if target not in ITERABLE_TARGETS],
         "affected_tables": tables,
         "affected_agents": agents,
         "anchors": anchors,
@@ -442,6 +550,10 @@ def analyze_change(
             "numerical_operations": numerical_operations,
         }
     _write_json(_pending_dir(project_dir) / f"{change_id}.json", analysis)
+    if previous_change_id and previous_change_id != change_id:
+        previous_path = _pending_dir(project_dir) / f"{previous_change_id}.json"
+        if previous_path.exists():
+            previous_path.unlink()
     return analysis
 
 
@@ -484,6 +596,85 @@ def _records_for_table(data: dict[str, Any], table: str, create: bool = False) -
 
 def _match_row(row: dict[str, Any], match: dict[str, Any]) -> bool:
     return all(row.get(key) == value for key, value in match.items())
+
+
+def normalize_numerical_operations(operations: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    normalized: list[dict[str, Any]] = []
+    errors: list[str] = []
+    expanded_operations: list[Any] = []
+    for raw in operations:
+        action = raw.get("action") or raw.get("operation") or raw.get("type") if isinstance(raw, dict) else None
+        columns = raw.get("columns") if isinstance(raw, dict) else None
+        if action == "add_column" and isinstance(columns, list) and columns and not raw.get("column"):
+            for column in columns:
+                expanded = {key: value for key, value in raw.items() if key != "columns"}
+                if isinstance(column, dict):
+                    expanded["column"] = column.get("column") or column.get("name") or column.get("field")
+                    if "default" in column:
+                        expanded["default"] = column["default"]
+                else:
+                    expanded["column"] = column
+                expanded_operations.append(expanded)
+        else:
+            expanded_operations.append(raw)
+
+    for index, raw in enumerate(expanded_operations):
+        if not isinstance(raw, dict):
+            errors.append(f"第 {index + 1} 个数值操作必须是对象")
+            continue
+        operation = dict(raw)
+        operation["action"] = operation.get("action") or operation.get("operation") or operation.get("type")
+        operation["table"] = operation.get("table") or operation.get("table_name") or operation.get("module")
+        action = operation.get("action")
+
+        if action in {"add_column", "delete_column"}:
+            operation["column"] = (
+                operation.get("column")
+                or operation.get("column_name")
+                or operation.get("field")
+                or operation.get("field_name")
+                or operation.get("name")
+            )
+            if "default" not in operation and "default_value" in operation:
+                operation["default"] = operation["default_value"]
+        elif action in {"create_table", "add_rows"} and "rows" not in operation:
+            operation["rows"] = operation.get("data", [])
+        elif action == "update_rows":
+            operation["match"] = operation.get("match") or operation.get("where")
+            operation["values"] = operation.get("values") or operation.get("set")
+        elif action == "delete_rows":
+            operation["match"] = operation.get("match") or operation.get("where")
+
+        label = f"第 {index + 1} 个数值操作"
+        table = str(operation.get("table", "")).strip()
+        column = str(operation.get("column") or "").strip()
+        if action not in NUMERICAL_OPERATIONS:
+            errors.append(f"{label}的 action 无效")
+        elif not table:
+            errors.append(f"{label}缺少 table")
+        elif action in {"add_column", "delete_column"} and not column:
+            errors.append(f"{label}缺少 column")
+        elif action in {"create_table", "add_rows"} and (
+            not isinstance(operation.get("rows"), list)
+            or not all(isinstance(row, dict) for row in operation["rows"])
+        ):
+            errors.append(f"{label}的 rows 必须是对象数组")
+        elif action == "update_rows" and (
+            not isinstance(operation.get("match"), dict)
+            or not operation["match"]
+            or not isinstance(operation.get("values"), dict)
+        ):
+            errors.append(f"{label}需要非空 match 和对象 values")
+        elif action == "delete_rows" and (
+            not isinstance(operation.get("match"), dict) or not operation["match"]
+        ):
+            errors.append(f"{label}需要非空 match")
+        else:
+            operation["table"] = table
+            if action in {"add_column", "delete_column"}:
+                operation["column"] = column
+            normalized.append(operation)
+    return normalized, errors
 
 
 def apply_numerical_operations(data: dict[str, Any], operations: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -544,31 +735,55 @@ def apply_numerical_operations(data: dict[str, Any], operations: list[dict[str, 
     return results
 
 
+def _compact_context(content: str, limit: int) -> str:
+    if len(content) <= limit:
+        return content
+    head = int(limit * 0.65)
+    tail = limit - head
+    return content[:head] + "\n\n...[中间内容已省略，禁止据此重写全文]...\n\n" + content[-tail:]
+
+
 def _generate_change_proposal(current: Path, analysis: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Ask the affected roles for a scoped patch proposal, never a full-document rewrite."""
     from Skills.llm_client import ask_llm, safe_extract_json
 
     context_parts: list[str] = []
+    remaining_budget = 36000
+    selected_document = analysis.get("selected_document")
     for filename in analysis.get("affected_files", []):
+        if remaining_budget <= 0:
+            break
         path = current / filename
         if path.suffix == ".md":
             content = _read_text(path)
         else:
             value = _read_json(path, {})
             content = json.dumps(value, ensure_ascii=False, indent=2)
-        context_parts.append(f"<{filename}>\n{content[:18000]}\n</{filename}>")
+        per_file_limit = 14000 if filename == selected_document else 7000
+        per_file_limit = min(per_file_limit, remaining_budget)
+        compacted = _compact_context(content, per_file_limit)
+        context_parts.append(f"<{filename}>\n{compacted}\n</{filename}>")
+        remaining_budget -= len(compacted)
 
     system_prompt = """你是游戏研发项目的增量修改协调器。
 你必须只针对批准的影响范围生成局部变更，禁止重写全文。
 文本修改只输出要追加到原文末尾的新增/修改内容与废弃说明。
 数值操作只能使用 create_table、add_column、add_rows、update_rows、delete_rows、delete_column。
 删除文本内容时写入 deprecated；删除数值时使用 delete_rows 或 delete_column。
+只允许修改“可写文件”，只读参考文件仅用于判断依赖和一致性，禁止出现在修改方案中。
+用户选中的主文档必须出现在修改方案中。
+如果可写文件包含 system_numerical_data.json，必须根据需求输出至少一个格式完整的 numerical_operations 操作。
 输出纯 JSON，不要 Markdown 代码块。"""
     user_prompt = f"""修改需求：
 {analysis['requirement']}
 
+需求与补充意见日志：{json.dumps(analysis.get("discussion", []), ensure_ascii=False)}
+上一轮变更预览：{json.dumps(analysis.get("previous_preview"), ensure_ascii=False) if analysis.get("previous_preview") else "无"}
+迭代类型：{"新增功能" if analysis.get("change_type") == "new_feature" else "老功能迭代"}
+用户选中的主文档：{analysis.get("selected_document") or "未指定"}
 受影响 Agent：{', '.join(analysis.get('affected_agents', []))}
-批准修改的文件：{', '.join(analysis.get('affected_files', []))}
+可写文件：{', '.join(analysis.get('writable_files', []))}
+只读参考文件：{', '.join(analysis.get('reference_files', [])) or "无"}
 定位到的章节：{json.dumps(analysis.get('anchors', {}), ensure_ascii=False)}
 
 当前内容：
@@ -583,17 +798,56 @@ def _generate_change_proposal(current: Path, analysis: dict[str, Any]) -> tuple[
     {{"action": "六种操作之一", "table": "表名", "...": "该操作需要的字段"}}
   ]
 }}"""
-    raw = ask_llm(system_prompt, user_prompt, max_tokens=8192)
+    raw = ask_llm(
+        system_prompt,
+        user_prompt,
+        max_tokens=4096,
+        timeout_seconds=90,
+        max_retries=1,
+    )
     json_text, error = safe_extract_json(raw, "IncrementalChange")
     if error or not json_text:
         raise ValueError(error or "AI 未生成有效的增量修改方案")
-    proposal = json.loads(json_text)
+    try:
+        proposal = json.loads(json_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"AI 返回的修改方案不是有效 JSON，请重试分析: {exc.msg}") from exc
     if not isinstance(proposal, dict):
         raise ValueError("AI 增量修改方案必须是 JSON 对象")
     text_changes = proposal.get("text_changes", [])
     numerical_operations = proposal.get("numerical_operations", [])
     if not isinstance(text_changes, list) or not isinstance(numerical_operations, list):
         raise ValueError("AI 增量修改方案字段格式错误")
+    approved_files = set(analysis.get("writable_files", analysis.get("affected_files", [])))
+    proposal_warnings: list[str] = []
+    numerical_operations, numerical_errors = normalize_numerical_operations(numerical_operations)
+    if numerical_errors:
+        proposal_warnings.extend(f"数值方案不完整：{error}" for error in numerical_errors)
+        analysis["proposal_incomplete"] = True
+    approved_text_changes: list[dict[str, Any]] = []
+    for item in text_changes:
+        filename = str(item.get("file", "")).strip() if isinstance(item, dict) else ""
+        if filename not in TEXT_TARGETS or filename not in approved_files:
+            proposal_warnings.append(f"已忽略未批准的文本修改: {filename or '未知文件'}")
+            continue
+        approved_text_changes.append(item)
+    text_changes = approved_text_changes
+    if numerical_operations and "system_numerical_data.json" not in approved_files:
+        proposal_warnings.append("已忽略未批准的数值修改")
+        numerical_operations = []
+    if "system_numerical_data.json" in approved_files and not numerical_operations:
+        proposal_warnings.append("影响范围包含数值配置，但模型未生成数值操作；请补充分析意见后重新分析")
+        analysis["proposal_incomplete"] = True
+    if proposal_warnings:
+        analysis["proposal_warnings"] = proposal_warnings
+
+    if selected_document in TEXT_TARGETS and not any(
+        isinstance(item, dict) and item.get("file") == selected_document
+        for item in text_changes
+    ):
+        raise ValueError(f"AI 方案未包含用户选中的主文档: {selected_document}")
+    if selected_document == "system_numerical_data.json" and not numerical_operations:
+        analysis["proposal_incomplete"] = True
     return text_changes, numerical_operations
 
 
@@ -641,6 +895,9 @@ def _llm_final_audit(current: Path, analysis: dict[str, Any]) -> dict[str, Any]:
     prompt = f"""原始修改需求：
 {analysis['requirement']}
 
+用户补充的分析意见：{analysis.get("analysis_feedback") or "无"}
+迭代类型：{"新增功能" if analysis.get("change_type") == "new_feature" else "老功能迭代"}
+用户选中的主文档：{analysis.get("selected_document") or "未指定"}
 请只检查以下修改后文件是否满足原始需求、是否跨文档矛盾、是否出现字段或接口断链。
 {chr(10).join(context)}
 
@@ -756,7 +1013,13 @@ def apply_change(
         numerical_operations = proposal.get("numerical_operations", []) if isinstance(proposal, dict) else []
     if not text_changes and not numerical_operations:
         text_changes, numerical_operations = _generate_change_proposal(_current_dir(project_dir), analysis)
-    if numerical_operations and "system_numerical_data.json" not in analysis.get("affected_files", []):
+    numerical_operations, numerical_errors = normalize_numerical_operations(numerical_operations)
+    if numerical_errors:
+        raise ValueError("数值变更方案不完整，请重新分析：" + "；".join(numerical_errors))
+    if analysis.get("proposal_incomplete"):
+        raise ValueError("当前修改方案存在已知遗漏，请补充意见并重新分析后再应用")
+    writable_files = analysis.get("writable_files", analysis.get("affected_files", []))
+    if numerical_operations and "system_numerical_data.json" not in writable_files:
         raise ValueError("Numerical operations are outside the approved impact scope")
 
     staging = Path(tempfile.mkdtemp(prefix=".change-", dir=project_dir))
@@ -767,7 +1030,7 @@ def apply_change(
         applied_text: list[str] = []
         for change in text_changes:
             filename = str(change.get("file", "")).strip()
-            if filename not in TEXT_TARGETS or filename not in analysis.get("affected_files", []):
+            if filename not in TEXT_TARGETS or filename not in writable_files:
                 raise ValueError(f"Text change is outside approved impact scope: {filename}")
             _append_change_section(
                 staging / filename,
@@ -797,6 +1060,9 @@ def apply_change(
         history_entry = _snapshot_current(project_dir, manifest, "incremental_change", {
             "change_id": change_id,
             "requirement": analysis["requirement"],
+            "analysis_feedback": analysis.get("analysis_feedback", ""),
+            "change_type": analysis.get("change_type", "existing_feature"),
+            "selected_document": analysis.get("selected_document"),
             "affected_files": analysis.get("affected_files", []),
             "affected_agents": analysis.get("affected_agents", []),
         })
@@ -823,6 +1089,8 @@ def apply_change(
             "ok": True,
             "change_id": change_id,
             "revision": next_revision,
+            "change_type": analysis.get("change_type", "existing_feature"),
+            "selected_document": analysis.get("selected_document"),
             "text_files": applied_text,
             "numerical_changes": numerical_results,
             "excel_tables": staged_tables,
@@ -846,14 +1114,24 @@ def apply_change(
 
 def rollback_project(data_dir: str | Path, system_id: str, history_id: str) -> dict[str, Any]:
     project_dir, manifest = get_project(data_dir, system_id)
+    target_entry = next(
+        (entry for entry in manifest.get("history", []) if entry.get("id") == history_id),
+        None,
+    )
+    if not isinstance(target_entry, dict):
+        raise FileNotFoundError(f"历史版本记录已丢失: {history_id}")
     snapshot = _history_dir(project_dir) / history_id / "snapshot"
     if not snapshot.is_dir():
-        raise FileNotFoundError(f"History snapshot not found: {history_id}")
+        raise FileNotFoundError(f"历史版本快照已丢失: {history_id}")
+    target_revision = int(target_entry.get("revision", 0))
     staging = Path(tempfile.mkdtemp(prefix=".rollback-", dir=project_dir))
     try:
         _copy_artifacts(snapshot, staging)
+        project_meta = _read_json(staging / "project_meta.json", {})
+        if isinstance(project_meta, dict):
+            project_meta["version"] = f"r{target_revision}"
+            _write_json(staging / "project_meta.json", project_meta)
         audit = _validate_project(staging)
-        _snapshot_current(project_dir, manifest, "pre_rollback", {"rollback_target": history_id})
         _copy_staging_to_current(project_dir, staging)
         excel_snapshot = _history_dir(project_dir) / history_id / "excel_snapshot"
         if excel_snapshot.is_dir():
@@ -868,13 +1146,17 @@ def rollback_project(data_dir: str | Path, system_id: str, history_id: str) -> d
                 if source.name == "index.json":
                     continue
                 shutil.copy2(source, excel_dir / source.name)
+        manifest["history"] = [
+            entry for entry in manifest.get("history", [])
+            if int(entry.get("revision", 0)) < target_revision
+        ]
         manifest.update({
-            "revision": int(manifest.get("revision", 0)) + 1,
+            "revision": target_revision,
             "updated_at": _now(),
-            "latest_change": f"rollback:{history_id}",
+            "latest_change": f"restored:{history_id}",
         })
         _write_json(_manifest_path(project_dir), manifest)
-        return {"ok": True, "revision": manifest["revision"], "restored": history_id, "audit": audit}
+        return {"ok": True, "revision": target_revision, "restored": history_id, "audit": audit}
     finally:
         if staging.exists():
             shutil.rmtree(staging)

@@ -3,179 +3,166 @@
   "task_id": "task_001",
   "payload": {
     "docs": {
-      "system_summary": "[角色宿舍] 该系统用于为玩家提供高自由度的角色展示与自定义空间，支持换装、拍照、场景布置及方案保存，旨在强化角色厨力与社交传播，不产出任何战斗资源。",
+      "system_summary": "[背包系统] 该系统用于管理玩家所有非战斗类道具（材料、礼物、消耗品、任务道具、其他）的存储、查看、使用、丢弃、堆叠与扩容操作，是纯仓储工具型容器，不持有独立经济循环，仅作为道具的“终点站”与“起点站”。",
       "field_dictionary": {
-        "character_id": "【字符串】角色唯一标识，作为宿舍场景的复合主键之一，不可重复。",
-        "player_id": "【字符串】玩家唯一标识，作为宿舍场景的复合主键之一，不可重复。",
-        "current_selected_character_id": "【字符串】当前选中的角色ID，用于加载对应宿舍场景，默认值为空字符串。",
-        "character_dormitory_config": "【对象】角色宿舍完整配置，包含场景模板ID、家具数据、装扮ID、姿势ID、表情ID，默认值为空对象。",
-        "character_current_skin_id": "【字符串】当前装备的皮肤ID，按部位（服装、头饰、武器外观等）分别存储，默认值为空字符串。",
-        "character_current_pose_id": "【字符串】当前使用的姿势ID，默认值为基础姿势ID。",
-        "character_current_expression_id": "【字符串】当前使用的表情ID，默认值为基础表情ID。",
-        "scene_furniture_data": "【数组】场景中已放置的家具/装饰品列表，每个元素包含物件ID、位置坐标（x,y,z）、旋转角度（rx,ry,rz）、缩放比例（s），默认值为空数组。",
-        "scene_template_id": "【字符串】当前使用的场景模板ID，默认值为初始免费模板ID。",
-        "character_scheme_data": "【数组】已保存的方案列表，每个元素包含方案ID、名称、场景模板ID、家具数据、装扮ID、姿势ID、表情ID，默认值为空数组。",
-        "current_scheme_id": "【字符串】当前使用的方案ID，默认值为空字符串。",
-        "free_scene_template_count": "【整数】初始免费场景模板数量，取值范围1-10，默认值为3。",
-        "base_pose_count": "【整数】每个角色初始基础姿势数量，取值范围1-5，默认值为2。",
-        "base_expression_count": "【整数】每个角色初始基础表情数量，取值范围1-5，默认值为2。",
-        "free_filter_count": "【整数】初始免费滤镜数量，取值范围1-10，默认值为5。",
-        "free_scheme_slot_count": "【整数】免费方案槽位数量，取值范围1-10，默认值为3。",
-        "scene_load_timeout": "【整数】场景加载超时时间（秒），取值范围5-30，默认值为15。",
-        "rotation_step": "【浮点数】家具旋转步进角度（度），取值范围1-90，默认值为15.0。",
-        "scale_step": "【浮点数】家具缩放步进倍数，取值范围0.1-1.0，默认值为0.1。",
-        "max_furniture_count": "【整数】单个场景最大可放置家具数量，取值范围10-100，默认值为30。",
-        "scheme_name_max_length": "【整数】方案名称最大字符数，取值范围10-50，默认值为20。",
-        "watermark_opacity": "【浮点数】分享截图水印透明度，取值范围0.1-1.0，默认值为0.3。",
-        "ui_opacity_min": "【浮点数】UI透明度最小值，取值范围0.0-0.5，默认值为0.1。",
-        "ui_opacity_max": "【浮点数】UI透明度最大值，取值范围0.5-1.0，默认值为0.9."
+        "bag_item_list": "【对象数组】玩家背包中所有道具条目的列表，每个条目包含 item_id、item_count、current_stack_size 等字段。默认值为空数组 []。",
+        "current_bag_category_id": "【整数】当前选中的一级分类标签ID（1=材料，2=礼物，3=消耗品，4=任务道具，5=其他）。默认值为 0（未选择）。",
+        "current_sort_order": "【整数】当前排序规则（0=不排序，1=稀有度升序，2=稀有度降序）。默认值为 0。",
+        "bag_max_slots": "【整数】背包最大格子数，初始值为 INITIAL_BAG_CAPACITY（50）。取值范围：[50, BAG_CAPACITY_HARD_CAP]。",
+        "occupied_slots": "【整数】当前已占用的格子数，等于 bag_item_list 的长度。取值范围：[0, bag_max_slots]。",
+        "item_count": "【整数】单个道具条目的持有数量。取值范围：[0, 999999]。默认值为 0。",
+        "current_stack_size": "【整数】单个堆叠的当前数量。取值范围：[1, MAX_STACK_SIZE]。默认值为 1。",
+        "item_category_id": "【整数】道具所属一级分类ID（1=材料，2=礼物，3=消耗品，4=任务道具，5=其他）。",
+        "item_id": "【整数】道具唯一标识ID，与 item_config_table 中的 id 字段关联。取值范围：[1, 99999]。",
+        "item_usable_flag": "【布尔】道具是否可被使用（消耗品）。true=可使用，false=不可使用。默认值为 false。",
+        "item_discardable_flag": "【布尔】道具是否可被丢弃。true=可丢弃，false=不可丢弃。默认值为 false。",
+        "item_config_table": "【对象数组】道具配置表，包含所有道具的完整信息（id、name、description、rarity、category_id、usable_flag、discardable_flag、source_description、effect_description 等）。",
+        "MAX_STACK_SIZE": "【整数】单个堆叠的最大数量上限。固定值为 999。",
+        "INITIAL_BAG_CAPACITY": "【整数】背包初始容量（格子数）。固定值为 50。",
+        "EXPAND_ITEM_ID": "【整数】背包扩容券的道具ID。固定值为 10001。",
+        "EXPAND_SLOTS_PER_USE": "【整数】每次扩容增加的格子数。固定值为 10。",
+        "PREMIUM_CURRENCY": "【字符串】付费货币名称。固定值为 \"premium_currency\"。",
+        "EXPAND_COST_CURRENCY": "【整数】每次使用付费货币扩容消耗的数量。固定值为 100。",
+        "BAG_CAPACITY_HARD_CAP": "【整数】背包容量硬上限。固定值为 500。",
+        "MAIL_RETENTION_DAYS": "【整数】邮件保留天数。固定值为 30。",
+        "RETRY_INTERVAL": "【整数】数据加载失败时的重试间隔（秒）。固定值为 5。",
+        "MAX_RETRY_COUNT": "【整数】数据加载失败时的最大重试次数。固定值为 3。",
+        "STAMINA_RECOVER_VALUE": "【整数】体力药水恢复的体力值。固定值为 60。",
+        "STAGE_ID": "【整数】关卡ID，用于道具来源说明。取值范围：[1, 99999]。",
+        "ERROR_BAG_FULL": "【整数】背包已满错误码。固定值为 1001。",
+        "ERROR_ITEM_NOT_ENOUGH": "【整数】道具不足错误码。固定值为 1002。",
+        "UI_BG_COLOR": "【字符串】背包界面背景色（RGBA十六进制）。固定值为 \"#1A1A2ECC\"。",
+        "ICON_SIZE": "【整数】道具图标尺寸（像素）。固定值为 80。",
+        "FREE_CURRENCY": "【字符串】免费货币名称。固定值为 \"free_currency\"。",
+        "GACHA_CURRENCY": "【字符串】抽卡货币名称。固定值为 \"gacha_currency\"。"
       },
       "relations_and_enums": {
-        "外键关系": {
-          "character_id": "引用自角色获取系统，作为宿舍场景的复合主键之一。",
-          "player_id": "引用自玩家账户系统，作为宿舍场景的复合主键之一。",
-          "character_current_skin_id": "引用自商城系统/背包系统，皮肤/配件ID。",
-          "character_current_pose_id": "引用自姿势解锁系统，姿势ID。",
-          "character_current_expression_id": "引用自表情解锁系统，表情ID。",
-          "scene_template_id": "引用自场景模板解锁系统，模板ID。",
-          "scene_furniture_data[].item_id": "引用自商城系统/背包系统，家具/装饰品ID。"
+        "跨表外键调用": {
+          "bag_item_list[].item_id": "关联 item_config_table[].id，用于获取道具的完整配置信息（名称、描述、稀有度、分类、可用性、可丢弃性等）。",
+          "bag_item_list[].item_category_id": "关联 item_config_table[].category_id，用于分类筛选。",
+          "EXPAND_ITEM_ID": "关联 item_config_table[].id，用于识别背包扩容券。",
+          "STAGE_ID": "关联关卡配置表（stage_config）的 id，用于道具来源说明。"
         },
         "状态码枚举": {
-          "scheme_save_status": {
-            "0": "保存成功",
-            "1": "方案槽位已满",
-            "2": "方案名称重复",
-            "3": "保存失败（数据异常）"
+          "current_bag_category_id": {
+            "0": "未选择（初始状态）",
+            "1": "材料",
+            "2": "礼物",
+            "3": "消耗品",
+            "4": "任务道具",
+            "5": "其他"
           },
-          "scene_load_status": {
-            "0": "加载成功",
-            "1": "加载超时",
-            "2": "配置数据损坏，已重置为默认",
-            "3": "加载失败（网络/资源异常）"
+          "current_sort_order": {
+            "0": "不排序（默认）",
+            "1": "稀有度升序（N→SSR）",
+            "2": "稀有度降序（SSR→N）"
           },
-          "furniture_placement_status": {
-            "0": "放置成功",
-            "1": "位置重叠（不可放置）",
-            "2": "超出场景边界",
-            "3": "达到数量上限"
+          "item_rarity": {
+            "1": "N（普通）",
+            "2": "R（稀有）",
+            "3": "SR（超稀有）",
+            "4": "SSR（传说）"
           },
-          "photo_save_status": {
-            "0": "保存成功",
-            "1": "存储空间不足",
-            "2": "保存失败（系统异常）"
+          "错误码": {
+            "1001": "ERROR_BAG_FULL - 背包已满",
+            "1002": "ERROR_ITEM_NOT_ENOUGH - 道具不足"
           }
         }
       },
-      "implementation_notes": "【执行建议】1. 所有玩家动态状态（如当前选中角色、当前装扮）由引擎运行时管理，配置表仅提供初始默认值。2. 场景家具数据采用JSON数组存储，每个物件包含完整变换信息，便于序列化与反序列化。3. 方案保存时自动截取场景缩略图，用于方案列表展示。4. 拍照模式截图保存至本地相册，文件名格式为'角色名_时间戳.png'。5. 所有付费内容（皮肤、场景模板、家具等）通过商城系统购买后，背包数据同步至宿舍系统。6. 物理效果分级（高/中/低）由玩家全局画质设置控制，宿舍系统读取后应用。7. UI透明度可在设置中调整，范围0.1-0.9。8. 场景加载超时时间、旋转步进、缩放步进等全局参数可在配置表中调整。"
+      "implementation_notes": "【执行建议】1. 背包界面为纯工具型全屏UI，使用半透明毛玻璃背景（#1A1A2ECC），道具图标统一80x80像素，网格4列布局。2. 所有道具操作（使用、丢弃）必须弹出二次确认弹窗，防止误操作。3. 扩容操作需同时支持道具消耗和付费货币两种方式，并处理数量不足的置灰与提示。4. 堆叠逻辑在 add_item 时自动触发，需检查 MAX_STACK_SIZE 上限并拆分。5. 背包满时 add_item 返回 ERROR_BAG_FULL，调用方（战斗、邮件、商城）需将溢出道具转入邮件系统。6. 数据加载失败时，按 RETRY_INTERVAL（5秒）重试 MAX_RETRY_COUNT（3次），仍失败则显示错误提示并提供刷新按钮。7. 所有道具配置（item_config_table）需在服务端和客户端同步维护，确保 item_id 唯一。8. 背包容量硬上限 BAG_CAPACITY_HARD_CAP（500）需在扩容时校验，达到后置灰扩容按钮。"
     },
     "data": {
-      "global_parameters": {
-        "scene_load_timeout": 15,
-        "rotation_step": 15.0,
-        "scale_step": 0.1,
-        "max_furniture_count": 30,
-        "scheme_name_max_length": 20,
-        "watermark_opacity": 0.3,
-        "ui_opacity_min": 0.1,
-        "ui_opacity_max": 0.9,
-        "free_scene_template_count": 3,
-        "base_pose_count": 2,
-        "base_expression_count": 2,
-        "free_filter_count": 5,
-        "free_scheme_slot_count": 3
-      },
-      "scene_templates": [
+      "bag_item_list": [],
+      "current_bag_category_id": 0,
+      "current_sort_order": 0,
+      "bag_max_slots": 50,
+      "occupied_slots": 0,
+      "item_config_table": [
         {
-          "template_id": "bedroom_01",
-          "name": "温馨卧室",
-          "description": "基础卧室场景，适合日常展示",
-          "is_free": true,
-          "unlock_cost": 0
+          "id": 10001,
+          "name": "背包扩容券",
+          "description": "使用后可永久增加10格背包容量。",
+          "rarity": 2,
+          "category_id": 3,
+          "usable_flag": true,
+          "discardable_flag": false,
+          "source_description": "来源：商城购买、活动奖励、任务完成",
+          "effect_description": "扩容：增加10格背包容量"
         },
         {
-          "template_id": "balcony_01",
-          "name": "阳光阳台",
-          "description": "户外阳台场景，光线明亮",
-          "is_free": true,
-          "unlock_cost": 0
+          "id": 10002,
+          "name": "体力药水（小）",
+          "description": "恢复60点体力。",
+          "rarity": 2,
+          "category_id": 3,
+          "usable_flag": true,
+          "discardable_flag": false,
+          "source_description": "来源：关卡掉落、每日签到",
+          "effect_description": "恢复60点体力"
         },
         {
-          "template_id": "garden_01",
-          "name": "秘密花园",
-          "description": "花园场景，适合拍照",
-          "is_free": true,
-          "unlock_cost": 0
+          "id": 20001,
+          "name": "突破材料·初级",
+          "description": "用于角色突破的基础材料。",
+          "rarity": 1,
+          "category_id": 1,
+          "usable_flag": false,
+          "discardable_flag": true,
+          "source_description": "来源：关卡[STAGE_ID]掉落",
+          "effect_description": ""
         },
         {
-          "template_id": "pool_01",
-          "name": "豪华泳池",
-          "description": "高级泳池场景，付费解锁",
-          "is_free": false,
-          "unlock_cost": 680
+          "id": 30001,
+          "name": "精致礼物盒",
+          "description": "赠送给角色可提升好感度。",
+          "rarity": 3,
+          "category_id": 2,
+          "usable_flag": false,
+          "discardable_flag": true,
+          "source_description": "来源：活动奖励、商城购买",
+          "effect_description": ""
         },
         {
-          "template_id": "terrace_01",
-          "name": "星空露台",
-          "description": "星空主题露台，付费解锁",
-          "is_free": false,
-          "unlock_cost": 880
+          "id": 40001,
+          "name": "主线任务信物",
+          "description": "完成主线第一章的证明，不可丢弃。",
+          "rarity": 1,
+          "category_id": 4,
+          "usable_flag": false,
+          "discardable_flag": false,
+          "source_description": "来源：主线任务奖励",
+          "effect_description": ""
+        },
+        {
+          "id": 50001,
+          "name": "旧世界残片",
+          "description": "来历不明的碎片，似乎隐藏着某种秘密。",
+          "rarity": 4,
+          "category_id": 5,
+          "usable_flag": false,
+          "discardable_flag": true,
+          "source_description": "来源：隐藏关卡掉落",
+          "effect_description": ""
         }
       ],
-      "base_poses": [
-        {
-          "pose_id": "stand_01",
-          "name": "标准站立",
-          "description": "基础站立姿势",
-          "is_default": true
-        },
-        {
-          "pose_id": "sit_01",
-          "name": "优雅坐姿",
-          "description": "基础坐姿",
-          "is_default": true
-        }
-      ],
-      "base_expressions": [
-        {
-          "expression_id": "smile_01",
-          "name": "微笑",
-          "description": "基础微笑表情",
-          "is_default": true
-        },
-        {
-          "expression_id": "blink_01",
-          "name": "眨眼",
-          "description": "基础眨眼表情",
-          "is_default": true
-        }
-      ],
-      "free_filters": [
-        {
-          "filter_id": "natural_01",
-          "name": "自然",
-          "description": "自然色彩滤镜"
-        },
-        {
-          "filter_id": "warm_01",
-          "name": "暖阳",
-          "description": "暖色调滤镜"
-        },
-        {
-          "filter_id": "cool_01",
-          "name": "冷月",
-          "description": "冷色调滤镜"
-        },
-        {
-          "filter_id": "vintage_01",
-          "name": "复古",
-          "description": "复古胶片滤镜"
-        },
-        {
-          "filter_id": "soft_01",
-          "name": "柔光",
-          "description": "柔光效果滤镜"
-        }
-      ]
+      "MAX_STACK_SIZE": 999,
+      "INITIAL_BAG_CAPACITY": 50,
+      "EXPAND_ITEM_ID": 10001,
+      "EXPAND_SLOTS_PER_USE": 10,
+      "PREMIUM_CURRENCY": "premium_currency",
+      "EXPAND_COST_CURRENCY": 100,
+      "BAG_CAPACITY_HARD_CAP": 500,
+      "MAIL_RETENTION_DAYS": 30,
+      "RETRY_INTERVAL": 5,
+      "MAX_RETRY_COUNT": 3,
+      "STAMINA_RECOVER_VALUE": 60,
+      "STAGE_ID": 1001,
+      "ERROR_BAG_FULL": 1001,
+      "ERROR_ITEM_NOT_ENOUGH": 1002,
+      "UI_BG_COLOR": "#1A1A2ECC",
+      "ICON_SIZE": 80,
+      "FREE_CURRENCY": "free_currency",
+      "GACHA_CURRENCY": "gacha_currency"
     }
   }
 }

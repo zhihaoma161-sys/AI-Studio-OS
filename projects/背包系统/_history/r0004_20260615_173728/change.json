@@ -1,0 +1,21 @@
+{
+  "revision": 4,
+  "id": "r0004_20260615_173728",
+  "timestamp": "2026-06-15T17:37:28+08:00",
+  "kind": "pre_rollback",
+  "files": [
+    "audit_feedback.json",
+    "audit_trace_log.md",
+    "concept_brief.md",
+    "project_meta.json",
+    "system_design_detail.md",
+    "system_design_draft.md",
+    "system_numerical_data.json",
+    "system_numerical_docs.json",
+    "system_schema.json",
+    "task_plan.md",
+    "tech_blueprint.md",
+    "ui_interaction_blueprint.md"
+  ],
+  "rollback_target": "r0003_20260615_161944"
+}

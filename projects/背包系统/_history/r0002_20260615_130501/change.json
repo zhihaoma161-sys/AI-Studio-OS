@@ -1,0 +1,20 @@
+{
+  "revision": 2,
+  "id": "r0002_20260615_130501",
+  "timestamp": "2026-06-15T13:05:02+08:00",
+  "kind": "archive_replace",
+  "files": [
+    "audit_feedback.json",
+    "audit_trace_log.md",
+    "concept_brief.md",
+    "project_meta.json",
+    "system_design_detail.md",
+    "system_design_draft.md",
+    "system_numerical_data.json",
+    "system_numerical_docs.json",
+    "system_schema.json",
+    "task_plan.md",
+    "tech_blueprint.md"
+  ],
+  "requirement": "Workspace archive"
+}

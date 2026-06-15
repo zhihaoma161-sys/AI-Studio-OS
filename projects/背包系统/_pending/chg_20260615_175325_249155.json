@@ -1,0 +1,273 @@
+{
+  "change_id": "chg_20260615_175325_249155",
+  "system_id": "背包系统",
+  "system_name": "背包系统",
+  "requirement": "背包要新增一个出售功能，点击之后界面有点变化，从点击道具变成批量选择道具，同时可以预览出售的结果。",
+  "analysis_feedback": "出售的预览需要加上不只是预览一种货币，有些出售是获得别的货币。界面预览时需要一起显示。就是界面要支持多个货币类型同时显示",
+  "previous_change_id": "chg_20260615_173748_b1a60f",
+  "previous_preview": {
+    "text_changes": [
+      {
+        "file": "system_design_draft.md",
+        "anchor": "2.2 道具操作",
+        "content": "\n### 2.3 出售功能（新增）\n- **入口与模式切换**：在背包主界面底部增加“出售模式”按钮。点击后，界面从“查看模式”切换为“出售模式”。\n- **批量选择**：在出售模式下，每个道具图标左上角出现勾选框。玩家可勾选多个道具（支持全选）。已勾选道具高亮边框。\n- **出售预览**：界面底部固定显示“出售预览”区域，实时展示：\n  - 已选道具数量\n  - 预计获得的总货币量（如金币）\n  - 每个道具的出售单价（点击道具可查看）\n- **确认出售**：点击“确认出售”按钮，弹出二次确认弹窗，显示出售总价与道具清单。确认后，道具从背包移除，货币增加。\n- **退出出售模式**：点击“取消”或“返回”按钮，退出出售模式，恢复查看模式。\n- **数据状态变化**：出售后，`item_count` 更新；若数量归零，该道具条目从列表中移除；玩家货币余额增加。\n- **边界与异常兜底**：\n  - 若所有道具均不可出售（`sellable_flag` 为 false），则“出售模式”按钮置灰，提示“当前无可出售道具”。\n  - 出售操作需二次确认，防止误操作。\n  - 若出售过程中网络",
+        "deprecated": ""
+      },
+      {
+        "file": "ui_interaction_blueprint.md",
+        "anchor": "界面一：背包主界面（全屏列表）",
+        "content": "\n### 3. 出售模式交互（新增）\n- **【前台可见数据】**：\n  - 每个道具图标左上角新增勾选框（仅在出售模式下显示）\n  - 底部固定“出售预览”区域：已选数量、预计总价\n  - 底部“确认出售”按钮（蓝色高亮）\n  - 底部“取消出售”按钮（灰色）\n- **【必须包含的操作】**：\n  - 点击“出售模式”按钮 → 切换至出售模式，显示勾选框与出售预览\n  - 点击道具勾选框 → 选中/取消选中该道具\n  - 点击“全选”按钮（可选）→ 选中当前分类下所有可出售道具\n  - 点击“确认出售” → 弹出二次确认弹窗（复用界面三模板，但文本改为“确认出售以下道具？”并显示总价）\n  - 点击“取消出售” → 退出出售模式，恢复查看模式\n- **【状态流转与兜底】**：\n  - **正常状态** → 出售模式开启，勾选框与预览区域显示\n  - **未选择任何道具** → “确认出售”按钮置灰，提示“请先选择要出售的道具”\n  - **选择道具后** → “确认出售”按钮高亮，预览区域更新\n  - **所有道具均不可出售** → “出售模式”按钮置灰，提示“当前无可出售道具”\n ",
+        "deprecated": ""
+      }
+    ],
+    "numerical_operations": [
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sellable_flag",
+        "column_type": "boolean",
+        "default_value": false,
+        "description": "道具是否可出售。true=可出售，false=不可出售。默认值为 false。"
+      },
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sell_price",
+        "column_type": "integer",
+        "default_value": 0,
+        "description": "道具出售单价（单位：基础货币，如金币）。0表示不可出售。"
+      },
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sell_currency_type",
+        "column_type": "string",
+        "default_value": "free_currency",
+        "description": "出售获得的货币类型，如 'free_currency'（金币）、'premium_currency'（付费货币）。默认值为 'free_currency'。"
+      },
+      {
+        "action": "update_rows",
+        "table": "item_config_table",
+        "rows": [
+          {
+            "id": 10002,
+            "sellable_flag": true,
+            "sell_price": 10,
+            "sell_currency_type": "free_currency"
+          },
+          {
+            "id": 20001,
+            "sellable_flag": true,
+            "sell_price": 5,
+            "sell_currency_type": "free_currency"
+          },
+          {
+            "id": 30001,
+            "sellable_flag": true,
+            "sell_price": 50,
+            "sell_currency_type": "free_currency"
+          },
+          {
+            "id": 50001,
+            "sellable_flag": true,
+            "sell_price": 100,
+            "sell_currency_type": "free_currency"
+          }
+        ],
+        "description": "为部分道具设置可出售标志和出售价格。背包扩容券（10001）和主线任务信物（40001）不可出售，保持默认值。"
+      }
+    ]
+  },
+  "change_type": "new_feature",
+  "selected_document": "system_design_draft.md",
+  "created_at": "2026-06-15T17:53:25+08:00",
+  "affected_files": [
+    "system_design_draft.md",
+    "system_numerical_data.json",
+    "system_numerical_docs.json",
+    "ui_interaction_blueprint.md"
+  ],
+  "writable_files": [
+    "system_design_draft.md",
+    "system_numerical_data.json",
+    "ui_interaction_blueprint.md"
+  ],
+  "reference_files": [
+    "system_numerical_docs.json"
+  ],
+  "affected_tables": [],
+  "affected_agents": [
+    "lead_planner",
+    "numerical_planner",
+    "ux_agent"
+  ],
+  "anchors": {
+    "system_design_draft.md": [
+      "背包系统 - 宏观设计草案",
+      "一、系统概述与设计愿景",
+      "二、核心规则与玩法机制",
+      "2.1 道具分类与筛选",
+      "2.2 道具操作",
+      "2.3 背包容量",
+      "三、表现层与角色展示联动",
+      "四、经济循环与商业化埋点",
+      "五、旧系统与数据联动",
+      "六、待确认风险与追问"
+    ],
+    "ui_interaction_blueprint.md": [
+      "背包系统 - UI 交互蓝图与生图清单",
+      "界面一：背包主界面（全屏列表）",
+      "1. 核心交互需求表 (Functional Checklist)",
+      "2. 结构化生图 Prompt (Layout Inspiration)",
+      "界面二：道具详情浮窗（弹窗）",
+      "1. 核心交互需求表 (Functional Checklist)",
+      "2. 结构化生图 Prompt (Layout Inspiration)",
+      "界面三：二次确认弹窗（使用/丢弃确认）",
+      "1. 核心交互需求表 (Functional Checklist)",
+      "2. 结构化生图 Prompt (Layout Inspiration)",
+      "界面四：扩容选择弹窗",
+      "1. 核心交互需求表 (Functional Checklist)",
+      "2. 结构化生图 Prompt (Layout Inspiration)"
+    ]
+  },
+  "dependent_systems": [
+    "活动大厅",
+    "角色外观自定义系统",
+    "邮件系统"
+  ],
+  "final_audit_required": true,
+  "proposal": {
+    "text_changes": [
+      {
+        "file": "system_design_draft.md",
+        "anchor": "2.2 道具操作",
+        "content": "\n### 2.3 出售功能（新增）\n- **入口与模式切换**：在背包主界面底部增加“出售模式”按钮。点击后，界面从“查看模式”切换为“出售模式”。\n- **批量选择**：在出售模式下，每个道具图标左上角出现勾选框。玩家可勾选多个道具（支持全选）。已勾选道具高亮边框。\n- **出售预览**：界面底部固定显示“出售预览”区域，实时展示：\n  - 已选道具数量\n  - 预计获得的总货币量（按货币类型分组显示，如金币、付费货币等）\n  - 每种货币的预计获得数量\n  - 每个道具的出售单价及货币类型（点击道具可查看）\n- **确认出售**：点击“确认出售”按钮，弹出二次确认弹窗，显示出售总价（按货币类型分组）与道具清单。确认后，道具从背包移除，对应货币增加。\n- **退出出售模式**：点击“取消”或“返回”按钮，退出出售模式，恢复查看模式。\n- **数据状态变化**：出售后，`item_count` 更新；若数量归零，该道具条目从列表中移除；玩家各货币余额增加。\n- **边界与异常兜底**：\n  - 若所有道具均不可出售（`sellable_flag` 为 false），则“出售模式”按钮置灰，提示“当前无可出售道具”。\n  - 出售操作需二次确认，防止误操作。\n  - 若出售过程中网络中断，回滚所有变更，提示“网络异常，请重试”。",
+        "deprecated": ""
+      }
+    ],
+    "numerical_operations": [
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sellable_flag",
+        "column_type": "boolean",
+        "default_value": false,
+        "description": "道具是否可出售。true=可出售，false=不可出售。默认值为 false。"
+      },
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sell_price",
+        "column_type": "integer",
+        "default_value": 0,
+        "description": "道具出售单价（单位：基础货币，如金币）。0表示不可出售。"
+      },
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sell_currency_type",
+        "column_type": "string",
+        "default_value": "free_currency",
+        "description": "出售获得的货币类型，如 'free_currency'（金币）、'premium_currency'（付费货币）。默认值为 'free_currency'。"
+      },
+      {
+        "action": "update_rows",
+        "table": "item_config_table",
+        "rows": [
+          {
+            "id": 10002,
+            "sellable_flag": true,
+            "sell_price": 10,
+            "sell_currency_type": "free_currency"
+          },
+          {
+            "id": 20001,
+            "sellable_flag": true,
+            "sell_price": 5,
+            "sell_currency_type": "free_currency"
+          },
+          {
+            "id": 30001,
+            "sellable_flag": true,
+            "sell_price": 50,
+            "sell_currency_type": "free_currency"
+          },
+          {
+            "id": 50001,
+            "sellable_flag": true,
+            "sell_price": 100,
+            "sell_currency_type": "premium_currency"
+          }
+        ],
+        "description": "为部分道具设置可出售标志、出售价格和货币类型。背包扩容券（10001）和主线任务信物（40001）不可出售，保持默认值。旧世界残片（50001）出售获得付费货币。"
+      }
+    ]
+  },
+  "preview": {
+    "text_changes": [
+      {
+        "file": "system_design_draft.md",
+        "anchor": "2.2 道具操作",
+        "content": "\n### 2.3 出售功能（新增）\n- **入口与模式切换**：在背包主界面底部增加“出售模式”按钮。点击后，界面从“查看模式”切换为“出售模式”。\n- **批量选择**：在出售模式下，每个道具图标左上角出现勾选框。玩家可勾选多个道具（支持全选）。已勾选道具高亮边框。\n- **出售预览**：界面底部固定显示“出售预览”区域，实时展示：\n  - 已选道具数量\n  - 预计获得的总货币量（按货币类型分组显示，如金币、付费货币等）\n  - 每种货币的预计获得数量\n  - 每个道具的出售单价及货币类型（点击道具可查看）\n- **确认出售**：点击“确认出售”按钮，弹出二次确认弹窗，显示出售总价（按货币类型分组）与道具清单。确认后，道具从背包移除，对应货币增加。\n- **退出出售模式**：点击“取消”或“返回”按钮，退出出售模式，恢复查看模式。\n- **数据状态变化**：出售后，`item_count` 更新；若数量归零，该道具条目从列表中移除；玩家各货币余额增加。\n- **边界与异常兜底**：\n  - 若所有道具均不可出售（`sellable_flag` 为 false），则“出售模式”按钮置",
+        "deprecated": ""
+      }
+    ],
+    "numerical_operations": [
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sellable_flag",
+        "column_type": "boolean",
+        "default_value": false,
+        "description": "道具是否可出售。true=可出售，false=不可出售。默认值为 false。"
+      },
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sell_price",
+        "column_type": "integer",
+        "default_value": 0,
+        "description": "道具出售单价（单位：基础货币，如金币）。0表示不可出售。"
+      },
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sell_currency_type",
+        "column_type": "string",
+        "default_value": "free_currency",
+        "description": "出售获得的货币类型，如 'free_currency'（金币）、'premium_currency'（付费货币）。默认值为 'free_currency'。"
+      },
+      {
+        "action": "update_rows",
+        "table": "item_config_table",
+        "rows": [
+          {
+            "id": 10002,
+            "sellable_flag": true,
+            "sell_price": 10,
+            "sell_currency_type": "free_currency"
+          },
+          {
+            "id": 20001,
+            "sellable_flag": true,
+            "sell_price": 5,
+            "sell_currency_type": "free_currency"
+          },
+          {
+            "id": 30001,
+            "sellable_flag": true,
+            "sell_price": 50,
+            "sell_currency_type": "free_currency"
+          },
+          {
+            "id": 50001,
+            "sellable_flag": true,
+            "sell_price": 100,
+            "sell_currency_type": "premium_currency"
+          }
+        ],
+        "description": "为部分道具设置可出售标志、出售价格和货币类型。背包扩容券（10001）和主线任务信物（40001）不可出售，保持默认值。旧世界残片（50001）出售获得付费货币。"
+      }
+    ]
+  }
+}
