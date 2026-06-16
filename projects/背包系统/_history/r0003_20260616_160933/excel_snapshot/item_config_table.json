@@ -1,10 +1,19 @@
 {
-  "bag_item_list": [],
-  "current_bag_category_id": 0,
-  "current_sort_order": 0,
-  "bag_max_slots": 50,
-  "occupied_slots": 0,
-  "item_config_table": [
+  "_metadata": {
+    "module": "item_config_table",
+    "fields": {
+      "category_id": "【待补充】category_id",
+      "description": "【待补充】description",
+      "discardable_flag": "【待补充】discardable_flag",
+      "effect_description": "【待补充】effect_description",
+      "id": "【待补充】id",
+      "name": "【待补充】name",
+      "rarity": "【待补充】rarity",
+      "source_description": "【待补充】source_description",
+      "usable_flag": "【待补充】usable_flag"
+    }
+  },
+  "data": [
     {
       "id": 10001,
       "name": "背包扩容券",
@@ -14,8 +23,7 @@
       "usable_flag": true,
       "discardable_flag": false,
       "source_description": "来源：商城购买、活动奖励、任务完成",
-      "effect_description": "扩容：增加10格背包容量",
-      "sell_price": 0
+      "effect_description": "扩容：增加10格背包容量"
     },
     {
       "id": 10002,
@@ -26,8 +34,7 @@
       "usable_flag": true,
       "discardable_flag": false,
       "source_description": "来源：关卡掉落、每日签到",
-      "effect_description": "恢复60点体力",
-      "sell_price": 0
+      "effect_description": "恢复60点体力"
     },
     {
       "id": 20001,
@@ -38,8 +45,7 @@
       "usable_flag": false,
       "discardable_flag": true,
       "source_description": "来源：关卡[STAGE_ID]掉落",
-      "effect_description": "",
-      "sell_price": 0
+      "effect_description": ""
     },
     {
       "id": 30001,
@@ -50,8 +56,7 @@
       "usable_flag": false,
       "discardable_flag": true,
       "source_description": "来源：活动奖励、商城购买",
-      "effect_description": "",
-      "sell_price": 0
+      "effect_description": ""
     },
     {
       "id": 40001,
@@ -62,8 +67,7 @@
       "usable_flag": false,
       "discardable_flag": false,
       "source_description": "来源：主线任务奖励",
-      "effect_description": "",
-      "sell_price": 0
+      "effect_description": ""
     },
     {
       "id": 50001,
@@ -74,26 +78,7 @@
       "usable_flag": false,
       "discardable_flag": true,
       "source_description": "来源：隐藏关卡掉落",
-      "effect_description": "",
-      "sell_price": 0
+      "effect_description": ""
     }
-  ],
-  "MAX_STACK_SIZE": 999,
-  "INITIAL_BAG_CAPACITY": 50,
-  "EXPAND_ITEM_ID": 10001,
-  "EXPAND_SLOTS_PER_USE": 10,
-  "PREMIUM_CURRENCY": "premium_currency",
-  "EXPAND_COST_CURRENCY": 100,
-  "BAG_CAPACITY_HARD_CAP": 500,
-  "MAIL_RETENTION_DAYS": 30,
-  "RETRY_INTERVAL": 5,
-  "MAX_RETRY_COUNT": 3,
-  "STAMINA_RECOVER_VALUE": 60,
-  "STAGE_ID": 1001,
-  "ERROR_BAG_FULL": 1001,
-  "ERROR_ITEM_NOT_ENOUGH": 1002,
-  "UI_BG_COLOR": "#1A1A2ECC",
-  "ICON_SIZE": 80,
-  "FREE_CURRENCY": "free_currency",
-  "GACHA_CURRENCY": "gacha_currency"
+  ]
 }

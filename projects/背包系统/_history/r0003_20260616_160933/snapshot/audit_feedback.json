@@ -1,0 +1,45 @@
+{
+  "status": "reject",
+  "issues": [
+    {
+      "severity": "致命",
+      "responsible_agent": "tech_architect",
+      "target_file": "tech_blueprint.md",
+      "anchor": "四、 前后端通信协议 (API & 数据对接)",
+      "problem_description": "API 接口列表中缺少 `C2S_SetCategoryFilter` 和 `C2S_SetSortOrder` 的返回数据结构定义。系统策划案和数值表均定义了 `current_bag_category_id` 和 `current_sort_order` 字段，且蓝图在“后端逻辑划分”中提到了服务端会更新这两个字段，但在API协议部分，这两个接口仅声明了“返回成功状态”，未定义返回的完整数据包结构（例如是否需要返回更新后的 `current_bag_category_id` 或 `current_sort_order` 给客户端确认）。这会导致前后端数据状态不同步的风险。",
+      "fix_suggestion": "在 `C2S_SetCategoryFilter` 和 `C2S_SetSortOrder` 的接口描述中，明确返回的数据结构，建议返回更新后的 `current_bag_category_id` 或 `current_sort_order` 字段，以便客户端进行状态同步校验。"
+    },
+    {
+      "severity": "高",
+      "responsible_agent": "tech_architect",
+      "target_file": "tech_blueprint.md",
+      "anchor": "三、 后端逻辑划分 (Server) - expand_capacity 校验",
+      "problem_description": "蓝图中的 `expand_capacity` 校验逻辑缺少对 `expand_type` 参数的枚举值定义和校验。系统策划案中明确提到了两种扩容方式（消耗扩容券和消耗付费货币），蓝图也提到了 `expand_type` 参数，但未在文档中定义 `expand_type` 的合法枚举值（如1和2）以及非法值的处理逻辑。这会导致接口调用方（客户端）传入非法值时，服务端行为不可预期。",
+      "fix_suggestion": "在 `expand_capacity` 校验逻辑中，明确 `expand_type` 参数的枚举值定义（例如：1=消耗扩容券, 2=消耗付费货币），并添加对非法 `expand_type` 值的错误处理逻辑（如返回错误码或忽略请求）。"
+    },
+    {
+      "severity": "高",
+      "responsible_agent": "tech_architect",
+      "target_file": "tech_blueprint.md",
+      "anchor": "四、 前后端通信协议 (API & 数据对接) - S2C_BagUpdate",
+      "problem_description": "蓝图定义了 `S2C_BagUpdate` 推送消息，但未明确该推送的触发条件和推送范围。系统策划案中涉及多个可能改变背包数据的操作（使用、丢弃、扩容、外部系统调用 add_item/remove_item），但蓝图未说明哪些操作会触发 `S2C_BagUpdate` 推送，以及推送是全局广播还是仅推送给当前玩家。这会导致客户端数据更新不及时或收到无关推送。",
+      "fix_suggestion": "在 `S2C_BagUpdate` 的描述中，明确其触发条件（例如：任何导致 `bag_item_list`、`occupied_slots` 或 `bag_max_slots` 变化的操作），并明确推送范围（仅推送给当前玩家）。"
+    },
+    {
+      "severity": "中",
+      "responsible_agent": "ux_agent",
+      "target_file": "ui_interaction_blueprint.md",
+      "anchor": "界面三：二次确认弹窗 - 状态流转与兜底",
+      "problem_description": "UX 蓝图在“二次确认弹窗”的“状态流转与兜底”中，为“使用”和“丢弃”操作定义了不同的点击外部关闭行为（使用可点击外部关闭，丢弃不可）。系统策划案中并未区分这两种操作的关闭行为，且这种差异化的交互设计增加了实现复杂度，且可能让用户感到困惑。这属于 UX Agent 的越权补全，引入了不必要的逻辑差异。",
+      "fix_suggestion": "统一“使用”和“丢弃”二次确认弹窗的关闭行为，建议均不允许点击外部关闭，以强化确认操作的严肃性，避免误操作。移除 UX 蓝图中关于“丢弃操作建议仅通过按钮关闭”的描述。"
+    },
+    {
+      "severity": "中",
+      "responsible_agent": "system_planner",
+      "target_file": "system_design_detail.md",
+      "anchor": "2.2.4 堆叠 - 边界与异常兜底",
+      "problem_description": "系统策划案中描述了堆叠逻辑，但未定义当 `add_item` 调用时，如果 `item_id` 在 `bag_item_list` 中存在但所有堆叠都已满，且 `occupied_slots` 未达到 `bag_max_slots` 时，创建新堆叠的具体规则。例如，新堆叠的 `current_stack_size` 初始值是多少？是等于 `count` 还是等于 `min(count, MAX_STACK_SIZE)`？这会导致程序实现时出现歧义。",
+      "fix_suggestion": "在系统策划案中明确新创建堆叠的 `current_stack_size` 初始值规则，建议为 `min(count, MAX_STACK_SIZE)`，并说明当 `count` 超过 `MAX_STACK_SIZE` 时需要创建多个堆叠。"
+    }
+  ]
+}

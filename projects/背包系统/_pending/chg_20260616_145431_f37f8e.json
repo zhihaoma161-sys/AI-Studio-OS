@@ -1,0 +1,202 @@
+{
+  "change_id": "chg_20260616_145431_f37f8e",
+  "system_id": "背包系统",
+  "system_name": "背包系统",
+  "requirement": "背包要新增一个出售功能，点击之后界面有点变化，从点击道具变成批量选择道具，同时可以预览出售的结果。",
+  "analysis_feedback": "",
+  "discussion": [
+    {
+      "kind": "requirement",
+      "content": "背包要新增一个出售功能，点击之后界面有点变化，从点击道具变成批量选择道具，同时可以预览出售的结果。",
+      "created_at": "2026-06-16T14:54:31+08:00"
+    }
+  ],
+  "previous_change_id": null,
+  "previous_preview": null,
+  "change_type": "new_feature",
+  "selected_document": "system_design_draft.md",
+  "created_at": "2026-06-16T14:54:31+08:00",
+  "affected_files": [
+    "system_design_draft.md",
+    "system_numerical_data.json",
+    "system_numerical_docs.json",
+    "ui_interaction_blueprint.md"
+  ],
+  "writable_files": [
+    "system_design_draft.md",
+    "system_numerical_data.json",
+    "ui_interaction_blueprint.md"
+  ],
+  "reference_files": [
+    "system_numerical_docs.json"
+  ],
+  "affected_tables": [],
+  "affected_agents": [
+    "lead_planner",
+    "numerical_planner",
+    "ux_agent"
+  ],
+  "anchors": {
+    "system_design_draft.md": [
+      "背包系统 - 宏观设计草案",
+      "一、系统概述与设计愿景",
+      "二、核心规则与玩法机制",
+      "2.1 道具分类与筛选",
+      "2.2 道具操作",
+      "2.3 背包容量",
+      "三、表现层与角色展示联动",
+      "四、经济循环与商业化埋点",
+      "五、旧系统与数据联动",
+      "六、待确认风险与追问"
+    ],
+    "ui_interaction_blueprint.md": [
+      "背包系统 - UI 交互蓝图与生图清单",
+      "界面一：背包主界面（全屏列表）",
+      "1. 核心交互需求表 (Functional Checklist)",
+      "2. 结构化生图 Prompt (Layout Inspiration)",
+      "界面二：道具详情浮窗（弹窗）",
+      "1. 核心交互需求表 (Functional Checklist)",
+      "2. 结构化生图 Prompt (Layout Inspiration)",
+      "界面三：二次确认弹窗（使用/丢弃确认）",
+      "1. 核心交互需求表 (Functional Checklist)",
+      "2. 结构化生图 Prompt (Layout Inspiration)",
+      "界面四：扩容选择弹窗",
+      "1. 核心交互需求表 (Functional Checklist)",
+      "2. 结构化生图 Prompt (Layout Inspiration)"
+    ]
+  },
+  "dependent_systems": [
+    "活动大厅",
+    "角色外观自定义系统",
+    "邮件系统"
+  ],
+  "final_audit_required": true,
+  "proposal_incomplete": true,
+  "proposal_warnings": [
+    "数值方案不完整：第 3 个数值操作需要非空 match 和对象 values"
+  ],
+  "proposal": {
+    "text_changes": [
+      {
+        "file": "system_design_draft.md",
+        "anchor": "2.2 道具操作",
+        "content": "\n### 2.2.1 出售功能（新增）\n- **功能入口**：在背包主界面底部新增“出售”按钮，位于“扩容”按钮左侧。\n- **出售模式切换**：点击“出售”按钮后，背包界面进入“出售模式”，此时：\n  - 每个道具图标左上角出现复选框，支持批量勾选。\n  - 底部出现“出售预览”区域，实时显示当前已选中道具的总出售收益（货币类型及数量）。\n  - 底部“出售”按钮变为“确认出售”（红色高亮），“扩容”按钮隐藏。\n  - 点击“取消出售”按钮（或再次点击“出售”按钮）退出出售模式，恢复为普通浏览模式。\n- **出售规则**：\n  - 仅可出售 `item_config_table` 中 `sellable_flag` 为 `true` 的道具。不可出售的道具复选框置灰且不可勾选。\n  - 出售后道具从背包中移除，不可恢复。\n  - 出售收益为固定值，由 `item_config_table` 中的 `sell_price` 字段定义，货币类型为 `FREE_CURRENCY`（免费货币）。\n  - 批量出售时，总收益 = 各道具出售价格 × 持有数量 之和。\n- **数据状态变化**：\n  - 出售后，对应道具的 `item_count` 减少，若数量归零则从 `bag_item_list` 中移除。\n  - `FREE_CURRENCY` 增加对应总收益。\n- **边界与异常兜底**：\n  - 若当前分类下无任何可出售道具，则“出售”按钮置灰并提示“当前无道具可出售”。\n  - 若选中道具后网络异常，显示“网络异常，请重试”，不扣除道具。\n  - 出售操作需二次确认弹窗，内容包含：选中道具列表、总收益预览、警告文字“出售后道具不可恢复”。",
+        "deprecated": ""
+      },
+      {
+        "file": "system_design_draft.md",
+        "anchor": "2.2 道具操作",
+        "content": "\n### 2.2.2 道具配置扩展（新增字段）\n- 在 `item_config_table` 中新增两个字段：\n  - `sellable_flag`（布尔）：标识该道具是否可出售。默认值为 `false`。\n  - `sell_price`（整数）：出售该道具可获得的免费货币数量。仅当 `sellable_flag` 为 `true` 时有效。默认值为 `0`。",
+        "deprecated": ""
+      },
+      {
+        "file": "ui_interaction_blueprint.md",
+        "anchor": "界面一：背包主界面（全屏列表）",
+        "content": "\n### 1.1 核心交互需求表补充（出售模式）\n- **【新增前台可见数据】**：\n  - 底部“出售”按钮（位于“扩容”按钮左侧）\n  - 出售模式下：每个道具图标左上角的复选框（可勾选/已勾选/不可勾选三种状态）\n  - 出售模式下：底部“出售预览”区域，显示“已选中 X 件道具，预计获得：免费货币 × Y”\n  - 出售模式下：底部“确认出售”按钮（红色高亮）和“取消出售”按钮（灰色）\n- **【新增必须包含的操作】**：\n  - 点击“出售”按钮 → 进入出售模式\n  - 出售模式下：点击道具复选框 → 勾选/取消勾选该道具\n  - 出售模式下：点击“确认出售” → 弹出二次确认弹窗（见新增界面五）\n  - 出售模式下：点击“取消出售” → 退出出售模式，恢复普通浏览\n  - 出售模式下：点击“出售预览”区域 → 可展开查看已选中道具的详细列表（可选）\n- **【新增状态流转与兜底】**：\n  - **进入出售模式** → 底部按钮切换，道具出现复选框，普通点击道具行为禁用（仅复选框可交互）\n  - **退出出售模式** → 复选框隐藏，底部按钮恢复，普通点击道具行为恢复\n  - **无可出售道具** → “出售”按钮置灰，提示“当前无道具可出售”\n  - **未选中任何道具时点击“确认出售”** → “确认出售”按钮置灰，不可点击\n  - **选中道具后网络异常** → 显示“网络异常，请重试”提示，不扣除道具",
+        "deprecated": ""
+      },
+      {
+        "file": "ui_interaction_blueprint.md",
+        "anchor": "界面三：二次确认弹窗（使用/丢弃确认）",
+        "content": "\n### 3.1 二次确认弹窗扩展（出售确认）\n- **【新增前台可见数据】**：\n  - 选中道具的简要列表（图标+名称+数量，可滚动）\n  - 总收益预览：“预计获得：免费货币 × Y”\n  - 警告文字：“出售后道具不可恢复，是否确认出售？”\n- **【新增必须包含的操作】**：\n  - 点击“确认出售”按钮 → 执行批量出售操作\n  - 点击“取消”按钮 → 关闭弹窗，返回出售模式\n  - 点击弹窗外区域 → 关闭弹窗（与使用操作一致）\n- **【新增状态流转与兜底】**：\n  - **正常状态** → 弹窗淡入显示，内容完整\n  - **出售成功** → 弹窗关闭，退出出售模式，主界面道具列表更新，底部显示“出售成功，获得免费货币 × Y”飘字动画\n  - **出售失败（道具数量不足）** → 弹窗显示“部分道具数量不足，出售失败”提示，自动关闭\n  - **网络中断** → 弹窗显示“网络异常，请重试”提示，不扣除道具",
+        "deprecated": ""
+      },
+      {
+        "file": "ui_interaction_blueprint.md",
+        "anchor": "界面四：扩容选择弹窗",
+        "content": "\n### 4.1 界面四：扩容选择弹窗（无修改）",
+        "deprecated": ""
+      },
+      {
+        "file": "ui_interaction_blueprint.md",
+        "anchor": "界面四：扩容选择弹窗",
+        "content": "\n## 界面五：出售确认弹窗（新增）\n\n### 1. 核心交互需求表 (Functional Checklist)\n- **【前台可见数据】**：\n  - 选中道具的简要列表（图标+名称+数量，可滚动）\n  - 总收益预览：“预计获得：免费货币 × Y”\n  - 警告文字：“出售后道具不可恢复，是否确认出售？”\n- **【必须包含的操作】**：\n  - 点击“确认出售”按钮 → 执行批量出售操作\n  - 点击“取消”按钮 → 关闭弹窗，返回出售模式\n  - 点击弹窗外区域 → 关闭弹窗\n- **【状态流转与兜底】**：\n  - **正常状态** → 弹窗淡入显示，内容完整\n  - **出售成功** → 弹窗关闭，退出出售模式，主界面道具列表更新，底部显示“出售成功，获得免费货币 × Y”飘字动画\n  - **出售失败（道具数量不足）** → 弹窗显示“部分道具数量不足，出售失败”提示，自动关闭\n  - **网络中断** → 弹窗显示“网络异常，请重试”提示，不扣除道具\n\n### 2. 结构化生图 Prompt (Layout Inspiration)\n- **Prompt (English)**:\n  - **Type**: Mobile Game Confirmation Popup\n  - **Style**: Sci-fi, clean flat design, dark mode, high contrast warning (red), semi-transparent overlay\n  - **Layout**: Centered modal with rounded corners, top area for selected item list (scrollable), middle area for total reward preview, bottom area for two buttons (Confirm Sell/Cancel)\n  - **Key Components**: “Selected Item List (icon + name + quantity)”, “Total Reward Preview (Free Currency icon + amount)”, “Warning Text”, “Confirm Sell Button (red)”, “Cancel Button (gray)”\n  - **Keywords**: UI/UX, user interface architecture, wireframe layout, clean hierarchy, figma layout, confirmation modal, batch sell\n- **布局意图解析 (中文)**：采用标准二次确认弹窗布局，顶部展示选中道具列表（可滚动），中部显示总收益预览，底部放置确认（红色）和取消（灰色）按钮。红色确认按钮强化风险提示，确保玩家在批量出售前能清晰了解即将失去的道具和获得的收益。",
+        "deprecated": ""
+      }
+    ],
+    "numerical_operations": [
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sellable_flag",
+        "column_type": "boolean",
+        "default_value": false,
+        "description": "标识该道具是否可出售",
+        "column": "sellable_flag",
+        "default": false
+      },
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sell_price",
+        "column_type": "integer",
+        "default_value": 0,
+        "description": "出售该道具可获得的免费货币数量",
+        "column": "sell_price",
+        "default": 0
+      }
+    ]
+  },
+  "preview": {
+    "text_changes": [
+      {
+        "file": "system_design_draft.md",
+        "anchor": "2.2 道具操作",
+        "content": "\n### 2.2.1 出售功能（新增）\n- **功能入口**：在背包主界面底部新增“出售”按钮，位于“扩容”按钮左侧。\n- **出售模式切换**：点击“出售”按钮后，背包界面进入“出售模式”，此时：\n  - 每个道具图标左上角出现复选框，支持批量勾选。\n  - 底部出现“出售预览”区域，实时显示当前已选中道具的总出售收益（货币类型及数量）。\n  - 底部“出售”按钮变为“确认出售”（红色高亮），“扩容”按钮隐藏。\n  - 点击“取消出售”按钮（或再次点击“出售”按钮）退出出售模式，恢复为普通浏览模式。\n- **出售规则**：\n  - 仅可出售 `item_config_table` 中 `sellable_flag` 为 `true` 的道具。不可出售的道具复选框置灰且不可勾选。\n  - 出售后道具从背包中移除，不可恢复。\n  - 出售收益为固定值，由 `item_config_table` 中的 `sell_price` 字段定义，货币类型为 `FREE_CURRENCY`（免费货币）。\n  - 批量出售时，总收益 = 各道具出售价格 × 持有数量 之和。\n- **数据状态变化**：",
+        "deprecated": ""
+      },
+      {
+        "file": "system_design_draft.md",
+        "anchor": "2.2 道具操作",
+        "content": "\n### 2.2.2 道具配置扩展（新增字段）\n- 在 `item_config_table` 中新增两个字段：\n  - `sellable_flag`（布尔）：标识该道具是否可出售。默认值为 `false`。\n  - `sell_price`（整数）：出售该道具可获得的免费货币数量。仅当 `sellable_flag` 为 `true` 时有效。默认值为 `0`。",
+        "deprecated": ""
+      },
+      {
+        "file": "ui_interaction_blueprint.md",
+        "anchor": "界面一：背包主界面（全屏列表）",
+        "content": "\n### 1.1 核心交互需求表补充（出售模式）\n- **【新增前台可见数据】**：\n  - 底部“出售”按钮（位于“扩容”按钮左侧）\n  - 出售模式下：每个道具图标左上角的复选框（可勾选/已勾选/不可勾选三种状态）\n  - 出售模式下：底部“出售预览”区域，显示“已选中 X 件道具，预计获得：免费货币 × Y”\n  - 出售模式下：底部“确认出售”按钮（红色高亮）和“取消出售”按钮（灰色）\n- **【新增必须包含的操作】**：\n  - 点击“出售”按钮 → 进入出售模式\n  - 出售模式下：点击道具复选框 → 勾选/取消勾选该道具\n  - 出售模式下：点击“确认出售” → 弹出二次确认弹窗（见新增界面五）\n  - 出售模式下：点击“取消出售” → 退出出售模式，恢复普通浏览\n  - 出售模式下：点击“出售预览”区域 → 可展开查看已选中道具的详细列表（可选）\n- **【新增状态流转与兜底】**：\n  - **进入出售模式** → 底部按钮切换，道具出现复选框，普通点击道具行为禁用（仅复选框可交互）\n  - **退出出售模式** → 复选框隐藏，底部按钮恢复，普通点击道具行为恢复\n ",
+        "deprecated": ""
+      },
+      {
+        "file": "ui_interaction_blueprint.md",
+        "anchor": "界面三：二次确认弹窗（使用/丢弃确认）",
+        "content": "\n### 3.1 二次确认弹窗扩展（出售确认）\n- **【新增前台可见数据】**：\n  - 选中道具的简要列表（图标+名称+数量，可滚动）\n  - 总收益预览：“预计获得：免费货币 × Y”\n  - 警告文字：“出售后道具不可恢复，是否确认出售？”\n- **【新增必须包含的操作】**：\n  - 点击“确认出售”按钮 → 执行批量出售操作\n  - 点击“取消”按钮 → 关闭弹窗，返回出售模式\n  - 点击弹窗外区域 → 关闭弹窗（与使用操作一致）\n- **【新增状态流转与兜底】**：\n  - **正常状态** → 弹窗淡入显示，内容完整\n  - **出售成功** → 弹窗关闭，退出出售模式，主界面道具列表更新，底部显示“出售成功，获得免费货币 × Y”飘字动画\n  - **出售失败（道具数量不足）** → 弹窗显示“部分道具数量不足，出售失败”提示，自动关闭\n  - **网络中断** → 弹窗显示“网络异常，请重试”提示，不扣除道具",
+        "deprecated": ""
+      },
+      {
+        "file": "ui_interaction_blueprint.md",
+        "anchor": "界面四：扩容选择弹窗",
+        "content": "\n### 4.1 界面四：扩容选择弹窗（无修改）",
+        "deprecated": ""
+      },
+      {
+        "file": "ui_interaction_blueprint.md",
+        "anchor": "界面四：扩容选择弹窗",
+        "content": "\n## 界面五：出售确认弹窗（新增）\n\n### 1. 核心交互需求表 (Functional Checklist)\n- **【前台可见数据】**：\n  - 选中道具的简要列表（图标+名称+数量，可滚动）\n  - 总收益预览：“预计获得：免费货币 × Y”\n  - 警告文字：“出售后道具不可恢复，是否确认出售？”\n- **【必须包含的操作】**：\n  - 点击“确认出售”按钮 → 执行批量出售操作\n  - 点击“取消”按钮 → 关闭弹窗，返回出售模式\n  - 点击弹窗外区域 → 关闭弹窗\n- **【状态流转与兜底】**：\n  - **正常状态** → 弹窗淡入显示，内容完整\n  - **出售成功** → 弹窗关闭，退出出售模式，主界面道具列表更新，底部显示“出售成功，获得免费货币 × Y”飘字动画\n  - **出售失败（道具数量不足）** → 弹窗显示“部分道具数量不足，出售失败”提示，自动关闭\n  - **网络中断** → 弹窗显示“网络异常，请重试”提示，不扣除道具\n\n### 2. 结构化生图 Prompt (Layout Inspiration)\n- **Prompt (Engli",
+        "deprecated": ""
+      }
+    ],
+    "numerical_operations": [
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sellable_flag",
+        "column_type": "boolean",
+        "default_value": false,
+        "description": "标识该道具是否可出售",
+        "column": "sellable_flag",
+        "default": false
+      },
+      {
+        "action": "add_column",
+        "table": "item_config_table",
+        "column_name": "sell_price",
+        "column_type": "integer",
+        "default_value": 0,
+        "description": "出售该道具可获得的免费货币数量",
+        "column": "sell_price",
+        "default": 0
+      }
+    ]
+  }
+}

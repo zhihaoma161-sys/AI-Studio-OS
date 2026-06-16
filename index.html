@@ -75,10 +75,12 @@ body{display:flex;}
 .iteration-grid strong{font-size:14px;}
 .iteration-grid select{padding:10px;border:1px solid #777;background:#fff;font-size:14px;}
 .iteration-log{min-height:150px;max-height:280px;overflow-y:auto;border:2px solid #777;background:#fff;padding:12px;margin-bottom:12px;}
-.iteration-message{padding:9px 11px;margin-bottom:8px;border-left:4px solid #555;background:#f5f5f5;white-space:pre-wrap;line-height:1.5;}
+.iteration-empty{color:#777;font:13px/1.5 "Consolas","Courier New",monospace;}
+.iteration-message{padding:8px 11px;margin-bottom:8px;border-left:4px solid #555;background:#f5f5f5;line-height:1.45;height:auto;min-height:0;}
 .iteration-message.requirement{border-left-color:#333;}
 .iteration-message.feedback{border-left-color:#e65100;background:#fff8f0;}
 .iteration-message small{display:block;color:#777;margin-bottom:4px;}
+.iteration-message-text{white-space:pre-wrap;overflow-wrap:anywhere;}
 .iteration-input{width:100%;min-height:100px;padding:12px;border:2px solid #555;resize:vertical;font-size:15px;line-height:1.6;}
 .iteration-actions{display:flex;gap:10px;margin-top:12px;}
 .primary-btn{padding:10px 18px;background:#333;color:#fff;border:1px solid #333;cursor:pointer;font-weight:bold;}
@@ -173,7 +175,7 @@ body{display:flex;}
 
     <div class="tab-content" id="tab-iterate">
         <div class="workspace" style="padding:20px 30px;">
-            <div class="log-header">归档文档迭代 <span style="font-size:12px;color:#777;font-weight:normal;">页面版本 20260615.5</span></div>
+            <div class="log-header">归档文档迭代 <span style="font-size:12px;color:#777;font-weight:normal;">页面版本 20260616.2</span></div>
             <div class="iteration-card">
                 <div class="iteration-grid">
                     <strong>所属系统</strong>
@@ -192,7 +194,7 @@ body{display:flex;}
                     </select>
                 </div>
                 <label class="mem-label">需求与修改意见日志</label>
-                <div class="iteration-log" id="iterationConversation"><div style="color:#999;">尚未输入需求</div></div>
+                <div class="iteration-log" id="iterationConversation"><div class="iteration-empty">[System] 等待引擎启动...</div></div>
                 <label class="mem-label" for="iterationInput">本次输入</label>
                 <textarea class="iteration-input" id="iterationInput" placeholder="首次输入基础修改需求；分析后继续在这里输入补充或纠正意见。"></textarea>
                 <div class="iteration-actions">
@@ -204,11 +206,14 @@ body{display:flex;}
             <div class="iteration-panel" id="iterationAnalysis" hidden>
                 <h3>影响分析与变更预览</h3>
                 <pre id="iterationSummary"></pre>
+                <h4 style="margin-top:14px;">监管拆分结果</h4>
+                <pre id="iterationSupervisorPreview"></pre>
                 <h4 style="margin-top:14px;">文本变更</h4>
                 <pre id="iterationTextPreview"></pre>
                 <h4 style="margin-top:14px;">数值变更</h4>
                 <pre id="iterationNumberPreview"></pre>
                 <div class="iteration-actions">
+                    <button class="secondary-btn" id="iterationConfirmImpactBtn" onclick="confirmImpactPlan()" hidden disabled>确认影响范围并生成完整预览</button>
                     <button class="primary-btn" id="iterationApplyBtn" onclick="applyIteration()" disabled>确认并启动迭代修改</button>
                 </div>
             </div>
@@ -263,7 +268,7 @@ body{display:flex;}
 <script>
 const API = window.location.origin;
 const WS_API = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
-const CLIENT_VERSION = '20260615.5';
+const CLIENT_VERSION = '20260616.2';
 const STATE_LABELS = {
     "idle":"Idle","pending_classification":"分类中","clarifying_requirements":"追问中",
     "pending_design_approval":"草案审批","pending_plan_approval":"排期审批",
@@ -614,6 +619,11 @@ function returnToProjectHistory() {
 function clearIterationAnalysis(statusText='需求或类型有变化，请重新分析。') {
     iterationContext.analysis = null;
     document.getElementById('iterationAnalysis').hidden = true;
+    const confirmBtn = document.getElementById('iterationConfirmImpactBtn');
+    if (confirmBtn) {
+        confirmBtn.hidden = true;
+        confirmBtn.disabled = true;
+    }
     document.getElementById('iterationApplyBtn').disabled = true;
     document.getElementById('iterationStatus').textContent = statusText;
 }
@@ -632,9 +642,9 @@ function renderIterationConversation() {
         ? iterationContext.messages.map((item, index) => `
             <div class="iteration-message ${item.kind}">
                 <small>${index + 1}. ${item.kind === 'requirement' ? '基础修改需求' : '补充修改意见'}</small>
-                ${escapeHtml(item.content)}
+                <div class="iteration-message-text">${escapeHtml(item.content)}</div>
             </div>`).join('')
-        : '<div style="color:#999;">尚未输入需求</div>';
+        : '<div class="iteration-empty">[System] 等待引擎启动...</div>';
     log.scrollTop = log.scrollHeight;
 }
 
@@ -684,6 +694,20 @@ function apiErrorMessage(result, fallback) {
     return parts.join('\n');
 }
 
+function isBlockingIncompleteAnalysis(analysis) {
+    const textPreview = analysis.preview?.text_changes || [];
+    const numericalPreview = analysis.preview?.numerical_operations || [];
+    const selectedDocument = analysis.selected_document || '';
+    const writableFiles = analysis.writable_files || analysis.affected_files || [];
+    const hasPreview = Boolean(textPreview.length || numericalPreview.length);
+    const selectedTextMissing = selectedDocument.endsWith('.md') &&
+        !textPreview.some(item => item.file === selectedDocument);
+    const numericalMissing = writableFiles.includes('system_numerical_data.json') &&
+        numericalPreview.length === 0;
+    return analysis.proposal_incomplete === true &&
+        (!hasPreview || selectedTextMissing || numericalMissing);
+}
+
 async function analyzeIteration(options={}) {
     const target = selectedIterationTarget();
     if (!target.systemId || !target.filename) {
@@ -696,8 +720,10 @@ async function analyzeIteration(options={}) {
 
     const status = document.getElementById('iterationStatus');
     const submitBtn = document.getElementById('iterationSubmitBtn');
+    const applyBtn = document.getElementById('iterationApplyBtn');
     const previousAnalysis = iterationContext.analysis;
     submitBtn.disabled = true;
+    applyBtn.disabled = true;
     status.textContent = options.previousChangeId ? '正在根据修改意见重新分析...' : '正在分析影响范围并生成局部修改方案...';
     try {
         const response = await fetch(API+'/api/changes/analyze',{
@@ -732,20 +758,192 @@ async function analyzeIteration(options={}) {
         document.getElementById('iterationNumberPreview').textContent =
             (analysis.preview?.numerical_operations||[]).map(x=>JSON.stringify(x,null,2)).join('\n\n') || '无数值变更';
         document.getElementById('iterationAnalysis').hidden = false;
-        document.getElementById('iterationApplyBtn').disabled = Boolean(analysis.proposal_incomplete);
-        status.textContent = analysis.proposal_incomplete
+        const proposalIncomplete = isBlockingIncompleteAnalysis(analysis);
+        const hasPreview = Boolean(
+            (analysis.preview?.text_changes || []).length ||
+            (analysis.preview?.numerical_operations || []).length
+        );
+        applyBtn.disabled = proposalIncomplete || !hasPreview || !analysis.change_id;
+        status.textContent = proposalIncomplete
             ? '当前方案存在已知遗漏，请在下方输入框继续补充意见。'
-            : '影响分析完成，请核对预览后启动迭代修改。';
+            : (analysis.proposal_incomplete === true
+                ? '影响分析完成，但有非致命警告；请核对预览后启动迭代修改。'
+                : '影响分析完成，请核对预览后启动迭代修改。');
     } catch(e) {
         iterationContext.analysis = previousAnalysis;
         document.getElementById('iterationStatus').textContent = '分析失败：' + e.message;
+        if (previousAnalysis?.change_id) applyBtn.disabled = isBlockingIncompleteAnalysis(previousAnalysis);
     } finally {
         submitBtn.disabled = false;
     }
 }
 
+function renderSupervisorPlan(analysis) {
+    const plan = analysis.supervisor_plan || {};
+    const files = Array.isArray(plan.files) ? plan.files : [];
+    if (!files.length) return '监管方未返回明确拆分结果。';
+    return files.map((item, index) => {
+        const mode = item.required ? '必改' : (item.reference_only ? '只读参考' : '可选');
+        const agent = item.agent || 'unassigned';
+        const reason = item.reason || '未说明原因';
+        return `${index + 1}. ${item.file} [${mode}]\n负责 Agent: ${agent}\n原因: ${reason}`;
+    }).join('\n\n');
+}
+
+function buildIterationSummary(analysis, changeType) {
+    const typeLabel = changeType === 'new_feature' ? '新增功能' : '老功能迭代';
+    const warnings = [
+        ...(analysis.supervisor_plan?.warnings || []),
+        ...(analysis.proposal_warnings || []),
+    ];
+    return [
+        `迭代类型：${typeLabel}`,
+        `入口文档：${analysis.selected_document || '未指定'}`,
+        `本轮补充意见：${analysis.analysis_feedback || '无'}`,
+        `可写文件：${(analysis.writable_files || []).join(', ') || '无'}`,
+        `只读参考：${(analysis.reference_files || []).join(', ') || '无'}`,
+        `执行 Agent：${(analysis.affected_agents || []).join(', ') || '无'}`,
+        `依赖系统：${(analysis.dependent_systems || []).join(', ') || '无'}`,
+        `方案警告：${warnings.join('；') || '无'}`,
+        `分析耗时：${analysis.duration_ms || 0} ms`,
+        `追踪编号：${analysis.trace_id || analysis.change_id}`,
+    ].join('\n');
+}
+
+function renderIterationPreview(analysis) {
+    const textChanges = analysis.preview?.text_changes || [];
+    const numericalOps = analysis.preview?.numerical_operations || [];
+    const numericalDocChanges = analysis.preview?.numerical_doc_changes || [];
+    document.getElementById('iterationTextPreview').textContent =
+        textChanges.map(x=>`[${x.file} @ ${x.anchor || '定位章节'}]\n${x.content || ''}${x.deprecated ? `\n废弃：${x.deprecated}` : ''}`).join('\n\n') ||
+        '确认监管拆分后生成文本变更预览。';
+    const numberBlocks = [];
+    if (numericalOps.length) {
+        numberBlocks.push('数值数据变更：\n' + numericalOps.map(x=>JSON.stringify(x,null,2)).join('\n\n'));
+    }
+    if (numericalDocChanges.length) {
+        numberBlocks.push('数值说明变更：\n' + numericalDocChanges.map(x=>JSON.stringify(x,null,2)).join('\n\n'));
+    }
+    document.getElementById('iterationNumberPreview').textContent =
+        numberBlocks.join('\n\n') || '确认监管拆分后生成数值变更预览。';
+}
+
+function isBlockingIncompleteAnalysis(analysis) {
+    const textPreview = analysis.preview?.text_changes || [];
+    const numericalPreview = analysis.preview?.numerical_operations || [];
+    const numericalDocPreview = analysis.preview?.numerical_doc_changes || [];
+    const writableFiles = analysis.writable_files || analysis.affected_files || [];
+    const supervisorFiles = analysis.supervisor_plan?.files || [];
+    const hasPreview = Boolean(textPreview.length || numericalPreview.length || numericalDocPreview.length);
+    const missingRequiredText = supervisorFiles.some(item =>
+        item?.required && String(item.file || '').endsWith('.md') &&
+        !textPreview.some(change => change.file === item.file)
+    );
+    const numericalMissing = writableFiles.includes('system_numerical_data.json') &&
+        numericalPreview.length === 0;
+    const numericalDocsMissing = numericalPreview.length > 0 &&
+        writableFiles.includes('system_numerical_docs.json') &&
+        numericalDocPreview.length === 0;
+    return !hasPreview || missingRequiredText || numericalMissing || numericalDocsMissing;
+}
+
+async function analyzeIteration(options={}) {
+    const target = selectedIterationTarget();
+    if (!target.systemId || !target.filename) {
+        return alert('请先从存档项目中选择要迭代的文档。');
+    }
+    const changeType = document.getElementById('iterationType').value;
+    const requirement = options.requirement || iterationContext.requirement;
+    if (!changeType) return alert('请说明本次需求是新增功能还是老功能迭代。');
+    if (!requirement) return alert('请输入本次迭代需求。');
+
+    const status = document.getElementById('iterationStatus');
+    const submitBtn = document.getElementById('iterationSubmitBtn');
+    const applyBtn = document.getElementById('iterationApplyBtn');
+    const confirmBtn = document.getElementById('iterationConfirmImpactBtn');
+    const previousAnalysis = iterationContext.analysis;
+    submitBtn.disabled = true;
+    applyBtn.disabled = true;
+    if (confirmBtn) confirmBtn.disabled = true;
+    status.textContent = options.impactConfirmed
+        ? '正在根据监管拆分生成完整修改预览...'
+        : (options.previousChangeId ? '正在根据修改意见重新进行监管拆分...' : '正在由监管 Agent 拆分影响范围...');
+    try {
+        const response = await fetch(API+'/api/changes/analyze',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+                client_version:CLIENT_VERSION,
+                system_id:target.systemId,
+                selected_document:target.filename,
+                change_type:changeType,
+                requirement,
+                analysis_feedback:options.feedback || '',
+                previous_change_id:options.previousChangeId || '',
+                impact_confirmed:Boolean(options.impactConfirmed),
+            })
+        });
+        const analysis = await readApiJson(response);
+        if (!analysis.ok) throw new Error(apiErrorMessage(analysis, '分析失败'));
+        iterationContext.analysis = analysis;
+        iterationContext.requirement = analysis.requirement;
+        if (Array.isArray(analysis.discussion)) {
+            iterationContext.messages = analysis.discussion.map(item=>({
+                kind:item.kind === 'feedback' ? 'feedback' : 'requirement',
+                content:item.content,
+            }));
+            renderIterationConversation();
+        }
+        document.getElementById('iterationSummary').textContent = buildIterationSummary(analysis, changeType);
+        document.getElementById('iterationSupervisorPreview').textContent = renderSupervisorPlan(analysis);
+        document.getElementById('iterationAnalysis').hidden = false;
+
+        const waitingForImpactConfirm = analysis.requires_impact_confirmation === true || !analysis.preview;
+        if (waitingForImpactConfirm) {
+            renderIterationPreview({preview:{text_changes:[], numerical_operations:[], numerical_doc_changes:[]}});
+            if (confirmBtn) {
+                confirmBtn.hidden = false;
+                confirmBtn.disabled = !analysis.change_id;
+            }
+            applyBtn.disabled = true;
+            status.textContent = '监管拆分完成，请确认影响范围后生成完整预览。';
+        } else {
+            if (confirmBtn) {
+                confirmBtn.hidden = true;
+                confirmBtn.disabled = true;
+            }
+            renderIterationPreview(analysis);
+            const blocked = isBlockingIncompleteAnalysis(analysis);
+            applyBtn.disabled = blocked || !analysis.change_id;
+            status.textContent = blocked
+                ? '当前方案缺少监管方要求的必改内容或数值说明，请在下方继续补充意见后重新分析。'
+                : (analysis.proposal_incomplete === true
+                    ? '完整预览已生成，但存在非致命警告；请核对后启动迭代修改。'
+                    : '完整预览已生成，请核对后启动迭代修改。');
+        }
+    } catch(e) {
+        iterationContext.analysis = previousAnalysis;
+        status.textContent = '分析失败：' + e.message;
+        if (previousAnalysis?.change_id) applyBtn.disabled = isBlockingIncompleteAnalysis(previousAnalysis);
+    } finally {
+        submitBtn.disabled = false;
+    }
+}
+
+async function confirmImpactPlan() {
+    const analysis = iterationContext.analysis;
+    if (!analysis?.change_id) return alert('请先完成监管拆分。');
+    await analyzeIteration({
+        requirement:iterationContext.requirement || analysis.requirement,
+        previousChangeId:analysis.change_id,
+        impactConfirmed:true,
+    });
+}
+
 async function applyIteration() {
     const analysis = iterationContext.analysis;
+    if (analysis?.requires_impact_confirmation || (analysis && !analysis.preview)) return alert('请先确认监管拆分并生成完整预览。');
+    if (analysis && isBlockingIncompleteAnalysis(analysis)) return alert('当前方案缺少必改内容或数值说明，请补充意见后重新分析。');
     if (!analysis) return alert('请先完成影响分析。');
     if (!confirm('确认按当前预览修改指定归档文档，并执行跨文档终审？')) return;
     const status = document.getElementById('iterationStatus');
@@ -757,7 +955,13 @@ async function applyIteration() {
         const response = await fetch(API+'/api/changes/apply',{
             method:'POST',
             headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({system_id:target.systemId,change_id:analysis.change_id})
+            body:JSON.stringify({
+                system_id:target.systemId,
+                change_id:analysis.change_id,
+                text_changes:analysis.proposal?.text_changes,
+                numerical_operations:analysis.proposal?.numerical_operations,
+                numerical_doc_changes:analysis.proposal?.numerical_doc_changes,
+            })
         });
         const result = await readApiJson(response);
         if (!result.ok) throw new Error(apiErrorMessage(result, '修改失败'));

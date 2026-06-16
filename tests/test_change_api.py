@@ -85,6 +85,7 @@ class ChangeApiTests(unittest.TestCase):
             change_type="new_feature",
             analysis_feedback="",
             previous_change_id="",
+            impact_confirmed=False,
         )
 
     def test_feedback_and_previous_change_reach_analysis(self):
@@ -115,6 +116,39 @@ class ChangeApiTests(unittest.TestCase):
             change_type="new_feature",
             analysis_feedback="遗漏出售价格配置",
             previous_change_id="chg_old",
+            impact_confirmed=False,
+        )
+
+    def test_confirmed_impact_flag_reaches_analysis(self):
+        result = {
+            "change_id": "chg_confirmed",
+            "affected_files": ["system_design_detail.md"],
+            "writable_files": ["system_design_detail.md"],
+            "impact_confirmed": True,
+        }
+        with patch("server._log_change_analysis"), patch("server.analyze_change", return_value=result) as analyze:
+            response = server.api_analyze_change({
+                "client_version": server.WEB_CLIENT_VERSION,
+                "system_id": "鑳屽寘绯荤粺",
+                "selected_document": "system_design_detail.md",
+                "change_type": "new_feature",
+                "requirement": "鏂板閬撳叿鍑哄敭鍔熻兘",
+                "previous_change_id": "chg_scope",
+                "impact_confirmed": True,
+            })
+
+        payload = json.loads(response.body)
+        self.assertTrue(payload["ok"])
+        analyze.assert_called_once_with(
+            server.DATA_DIR,
+            "鑳屽寘绯荤粺",
+            "鏂板閬撳叿鍑哄敭鍔熻兘",
+            generate_proposal=True,
+            selected_document="system_design_detail.md",
+            change_type="new_feature",
+            analysis_feedback="",
+            previous_change_id="chg_scope",
+            impact_confirmed=True,
         )
 
     def test_validation_error_with_json_filename_is_not_reported_as_model_json_error(self):

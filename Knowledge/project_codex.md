@@ -3,7 +3,7 @@
 > 本文档仅从稳定归档项目与当前有效数值表生成。候选规范不会约束 Agent，只有人工批准的规范会生效。
 
 ## 系统清单
-- **背包系统** (`背包系统`) | 状态: deprecated | 修订: r5 | 最近变更: rollback:r0003_20260615_161944
+- **背包系统** (`背包系统`) | 状态: deprecated | 修订: r4 | 最近变更: chg_20260616_160828_b20acd
   - 依赖: 邮件系统
   - 数值表: bag_item_list, item_config_table
 - **全品类美术图鉴** (`全品类美术图鉴`) | 状态: active | 修订: r1 | 最近变更: legacy_migration
@@ -20,7 +20,7 @@
   - 数值表: continuous_formulas, discrete_milestones
 
 ## 当前有效数值表
-- **item_config_table.json** | 6 行 | 字段: `category_id, description, discardable_flag, effect_description, id, name, rarity, source_description, usable_flag` | 主键范围: 10001 ~ 50001
+- **item_config_table.json** | 6 行 | 字段: `category_id, description, discardable_flag, effect_description, id, name, rarity, sell_price, source_description, usable_flag` | 主键范围: 10001 ~ 50001
 
 ## 已批准项目规范
 - （暂无，候选规范需在 Web 端人工确认）

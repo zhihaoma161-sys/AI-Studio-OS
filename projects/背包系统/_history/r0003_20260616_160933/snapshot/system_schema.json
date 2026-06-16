@@ -1,0 +1,39 @@
+[
+  {
+    "module_name": "bag_system",
+    "continuous_fields": [
+      "bag_item_list",
+      "current_bag_category_id",
+      "current_sort_order",
+      "bag_max_slots",
+      "occupied_slots",
+      "item_count",
+      "current_stack_size"
+    ],
+    "discrete_fields": [
+      "item_category_id",
+      "item_id",
+      "item_usable_flag",
+      "item_discardable_flag",
+      "item_config_table",
+      "MAX_STACK_SIZE",
+      "INITIAL_BAG_CAPACITY",
+      "EXPAND_ITEM_ID",
+      "EXPAND_SLOTS_PER_USE",
+      "PREMIUM_CURRENCY",
+      "EXPAND_COST_CURRENCY",
+      "BAG_CAPACITY_HARD_CAP",
+      "MAIL_RETENTION_DAYS",
+      "RETRY_INTERVAL",
+      "MAX_RETRY_COUNT",
+      "STAMINA_RECOVER_VALUE",
+      "STAGE_ID",
+      "ERROR_BAG_FULL",
+      "ERROR_ITEM_NOT_ENOUGH",
+      "UI_BG_COLOR",
+      "ICON_SIZE",
+      "FREE_CURRENCY",
+      "GACHA_CURRENCY"
+    ]
+  }
+]

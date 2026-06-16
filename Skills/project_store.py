@@ -50,7 +50,28 @@ NUMERICAL_OPERATIONS = {
 }
 
 CHANGE_TYPES = {"new_feature", "existing_feature"}
-ITERABLE_TARGETS = set(TEXT_TARGETS) | {"system_numerical_data.json"}
+NUMERICAL_DOC_TARGET = "system_numerical_docs.json"
+WRITABLE_INCREMENTAL_TARGETS = set(TEXT_TARGETS) | {"system_numerical_data.json", NUMERICAL_DOC_TARGET}
+ITERABLE_TARGETS = set(WRITABLE_INCREMENTAL_TARGETS)
+
+AGENT_BY_FILE = {
+    **TEXT_TARGETS,
+    "system_numerical_data.json": "numerical_planner",
+    NUMERICAL_DOC_TARGET: "numerical_planner",
+    "system_schema.json": "schema_translator",
+}
+
+FILE_ORDER = [
+    "concept_brief.md",
+    "system_design_draft.md",
+    "system_design_detail.md",
+    "ui_interaction_blueprint.md",
+    "system_numerical_data.json",
+    NUMERICAL_DOC_TARGET,
+    "tech_blueprint.md",
+    "system_schema.json",
+    "task_plan.md",
+]
 
 LEGACY_PATTERN = re.compile(r"^(?P<name>.+)_(?P<timestamp>\d{8}_\d{6})$")
 HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
@@ -391,61 +412,279 @@ def _has_positive_keyword(text: str, keywords: tuple[str, ...]) -> bool:
     return False
 
 
-def _select_targets(
+def _ordered_files(files: set[str] | list[str]) -> list[str]:
+    known = [filename for filename in FILE_ORDER if filename in files]
+    extra = sorted(filename for filename in files if filename not in FILE_ORDER)
+    return known + extra
+
+
+def _plan_entry(
+    filename: str,
+    reason: str,
+    *,
+    required: bool = True,
+    writable: bool | None = None,
+    agent: str | None = None,
+    source: str = "rules",
+) -> dict[str, Any]:
+    return {
+        "file": filename,
+        "reason": reason,
+        "agent": agent or AGENT_BY_FILE.get(filename, "pm_supervisor"),
+        "required": bool(required),
+        "writable": filename in WRITABLE_INCREMENTAL_TARGETS if writable is None else bool(writable),
+        "source": source,
+    }
+
+
+def _merge_plan_entries(entries: list[dict[str, Any]], current: Path) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for item in entries:
+        filename = str(item.get("file", "")).strip()
+        if not filename:
+            continue
+        if not (current / filename).is_file() and filename not in WRITABLE_INCREMENTAL_TARGETS:
+            continue
+        existing = merged.get(filename)
+        if existing is None:
+            normalized = _plan_entry(
+                filename,
+                str(item.get("reason") or "监管影响分析"),
+                required=bool(item.get("required", True)),
+                writable=bool(item.get("writable", filename in WRITABLE_INCREMENTAL_TARGETS)),
+                agent=str(item.get("agent") or AGENT_BY_FILE.get(filename, "pm_supervisor")),
+                source=str(item.get("source") or "supervisor"),
+            )
+            if filename not in WRITABLE_INCREMENTAL_TARGETS:
+                normalized["writable"] = False
+            merged[filename] = normalized
+            continue
+        reasons = {existing.get("reason", "")}
+        if item.get("reason"):
+            reasons.add(str(item["reason"]))
+        existing["reason"] = "；".join(reason for reason in reasons if reason)
+        existing["required"] = bool(existing.get("required")) or bool(item.get("required", True))
+        existing["writable"] = bool(existing.get("writable")) or (
+            bool(item.get("writable")) and filename in WRITABLE_INCREMENTAL_TARGETS
+        )
+        sources = {str(existing.get("source") or "supervisor"), str(item.get("source") or "supervisor")}
+        existing["source"] = "+".join(sorted(sources))
+    return [merged[filename] for filename in _ordered_files(set(merged))]
+
+
+def _build_rule_supervisor_entries(
     requirement: str,
     current: Path,
-    selected_document: str | None = None,
+    selected_document: str | None,
+    change_type: str,
     analysis_feedback: str = "",
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[dict[str, Any]], list[str]]:
     text = f"{requirement}\n{analysis_feedback}".lower()
-    targets: set[str] = set()
-    agents: set[str] = set()
-    tables: set[str] = set()
+    entries: list[dict[str, Any]] = []
+    warnings: list[str] = []
 
     if selected_document:
         if selected_document not in ITERABLE_TARGETS:
             raise ValueError(f"Document does not support incremental iteration: {selected_document}")
         if not (current / selected_document).is_file():
             raise FileNotFoundError(f"Selected document not found: {selected_document}")
-        targets.add(selected_document)
-        if selected_document in TEXT_TARGETS:
-            agents.add(TEXT_TARGETS[selected_document])
-        elif selected_document == "system_numerical_data.json":
-            agents.add("numerical_planner")
+        entries.append(_plan_entry(selected_document, "用户选中的需求入口文档", source="selected_document"))
     else:
-        targets.add("system_design_detail.md")
-        agents.add("system_planner")
+        entries.append(_plan_entry("system_design_detail.md", "未选择入口文档，默认从系统详细案承接需求"))
 
-    impact_domains = (
-        (
-            (
-                "数值", "配置", "参数", "字段", "列", "表", "价格", "定价", "成本", "收益",
-                "奖励", "概率", "几率", "权重", "掉落", "产出", "消耗", "货币", "兑换",
-                "购买", "买入", "出售", "卖出", "售价", "容量", "上限", "数量", "倍率",
-                "成长", "属性", "冷却", "时长",
-            ),
-            {"system_numerical_data.json", "system_numerical_docs.json"},
-            {"numerical_planner"},
-        ),
-        (("接口", "协议", "schema", "程序", "技术", "服务端", "客户端"), {"system_schema.json", "tech_blueprint.md"}, {"schema_translator", "tech_architect"}),
-        (("ui", "界面", "交互", "弹窗", "按钮", "表现"), {"ui_interaction_blueprint.md"}, {"ux_agent"}),
-        (("排期", "任务", "工期", "里程碑"), {"task_plan.md"}, {"task_planner"}),
+    functional_keywords = ("功能", "玩法", "流程", "模式", "规则", "出售", "购买", "兑换", "使用")
+    if change_type == "new_feature" and (
+        selected_document == "system_design_draft.md"
+        or _has_positive_keyword(text, functional_keywords)
+    ):
+        entries.append(_plan_entry("system_design_draft.md", "新增功能需要补充系统大纲"))
+        entries.append(_plan_entry("system_design_detail.md", "新增功能需要补充系统详细规则"))
+
+    numerical_keywords = (
+        "数值", "配置", "参数", "字段", "列", "表", "价格", "定价", "成本", "收益",
+        "奖励", "概率", "几率", "权重", "掉落", "产出", "消耗", "货币", "兑换",
+        "购买", "买入", "出售", "卖出", "售价", "容量", "上限", "数量", "倍率",
+        "成长", "属性", "冷却", "时长",
     )
-    for keywords, files, owners in impact_domains:
-        if _has_positive_keyword(text, keywords):
-            targets.update(files)
-            agents.update(owners)
+    if _has_positive_keyword(text, numerical_keywords):
+        entries.append(_plan_entry("system_numerical_data.json", "需求涉及数值配置或字段变更"))
+        entries.append(_plan_entry(NUMERICAL_DOC_TARGET, "数值字段或参数变更必须同步补充说明"))
+
+    ui_keywords = ("ui", "界面", "交互", "弹窗", "按钮", "表现", "点击", "预览", "选择", "勾选", "展示")
+    if _has_positive_keyword(text, ui_keywords):
+        entries.append(_plan_entry("ui_interaction_blueprint.md", "需求涉及界面或交互表现"))
+
+    tech_keywords = ("接口", "协议", "schema", "程序", "技术", "服务端", "客户端", "错误码", "超时")
+    if _has_positive_keyword(text, tech_keywords):
+        entries.append(_plan_entry("tech_blueprint.md", "需求涉及技术实现或接口行为"))
+        entries.append(_plan_entry("system_schema.json", "接口或字段可能影响结构定义，作为一致性参考", required=False, writable=False))
+
+    if _has_positive_keyword(text, ("排期", "任务", "工期", "里程碑")):
+        entries.append(_plan_entry("task_plan.md", "需求涉及执行计划或里程碑"))
 
     numerical = _read_json(current / "system_numerical_data.json", {})
     if isinstance(numerical, dict):
         for table in numerical:
             if str(table).lower() in text:
-                tables.add(str(table))
-                targets.update({"system_numerical_data.json", "system_numerical_docs.json"})
-                agents.add("numerical_planner")
+                entries.append(_plan_entry("system_numerical_data.json", f"需求点名数值表 {table}"))
+                entries.append(_plan_entry(NUMERICAL_DOC_TARGET, f"数值表 {table} 变更需同步说明"))
 
-    existing_targets = [target for target in sorted(targets) if (current / target).is_file()]
-    return existing_targets, sorted(agents), sorted(tables)
+    entries = _merge_plan_entries(entries, current)
+    if not entries:
+        warnings.append("监管规则未命中具体文档，已默认要求系统详细案")
+        entries = _merge_plan_entries([_plan_entry("system_design_detail.md", "默认承接需求")], current)
+    return entries, warnings
+
+
+def _llm_supervisor_entries(
+    requirement: str,
+    current: Path,
+    selected_document: str | None,
+    change_type: str,
+    discussion: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    from Skills.llm_client import ask_llm, safe_extract_json
+
+    available = []
+    for filename in FILE_ORDER:
+        path = current / filename
+        if not path.is_file():
+            continue
+        headings = _headings(path)[:12] if path.suffix == ".md" else []
+        available.append({
+            "file": filename,
+            "agent": AGENT_BY_FILE.get(filename, "reference"),
+            "writable": filename in WRITABLE_INCREMENTAL_TARGETS,
+            "headings": headings,
+        })
+    prompt = f"""你是游戏项目归档迭代的监管方 PM Agent。你的职责是判断一个需求会影响哪些下属功能 Agent 和文档。
+选中文档只是需求入口，不是修改边界。必须找出所有必改文档和只读参考文档。
+
+需求：{requirement}
+迭代类型：{"新增功能" if change_type == "new_feature" else "老功能迭代"}
+入口文档：{selected_document or "未指定"}
+需求日志：{json.dumps(discussion, ensure_ascii=False)}
+可用文档：{json.dumps(available, ensure_ascii=False)}
+
+硬性要求：
+- 新增功能若影响系统大纲，必须同时要求系统详细案。
+- 涉及界面、交互、按钮、弹窗、预览时，必须要求 UX 蓝图。
+- 涉及数值表、字段、价格、货币、概率、冷却等时，必须要求数值数据和数值说明。
+- 只读参考文档可列出，但不要标记 writable。
+
+输出纯 JSON：
+{{"files":[{{"file":"文件名","reason":"为什么受影响","agent":"负责 Agent","required":true,"writable":true}}]}}"""
+    try:
+        raw = ask_llm(
+            "你是严谨的项目影响范围监管方，只输出 JSON。",
+            prompt,
+            max_tokens=2048,
+            timeout_seconds=45,
+            max_retries=1,
+        )
+        json_text, error = safe_extract_json(raw, "SupervisorImpact")
+        if error or not json_text:
+            return [], [error or "监管 Agent 未返回有效 JSON，已使用规则兜底"]
+        result = json.loads(json_text)
+    except Exception as exc:
+        return [], [f"监管 Agent 调用失败，已使用规则兜底：{exc}"]
+    if not isinstance(result, dict) or not isinstance(result.get("files"), list):
+        return [], ["监管 Agent 输出缺少 files，已使用规则兜底"]
+    entries = []
+    for item in result["files"]:
+        if not isinstance(item, dict):
+            continue
+        filename = str(item.get("file", "")).strip()
+        if not filename:
+            continue
+        entries.append(_plan_entry(
+            filename,
+            str(item.get("reason") or "监管 Agent 判断受影响"),
+            required=bool(item.get("required", True)),
+            writable=bool(item.get("writable", filename in WRITABLE_INCREMENTAL_TARGETS)),
+            agent=str(item.get("agent") or AGENT_BY_FILE.get(filename, "pm_supervisor")),
+            source="llm_supervisor",
+        ))
+    return _merge_plan_entries(entries, current), []
+
+
+def _build_supervisor_plan(
+    requirement: str,
+    current: Path,
+    selected_document: str | None,
+    change_type: str,
+    discussion: list[dict[str, Any]],
+    analysis_feedback: str = "",
+    previous_analysis: dict[str, Any] | None = None,
+    reuse_previous: bool = False,
+    use_llm: bool = True,
+) -> dict[str, Any]:
+    if reuse_previous and isinstance(previous_analysis, dict) and isinstance(previous_analysis.get("supervisor_plan"), dict):
+        plan = dict(previous_analysis["supervisor_plan"])
+        plan["reused_from"] = previous_analysis.get("change_id")
+        return plan
+    rule_entries, warnings = _build_rule_supervisor_entries(
+        requirement,
+        current,
+        selected_document,
+        change_type,
+        analysis_feedback,
+    )
+    llm_entries: list[dict[str, Any]] = []
+    llm_warnings: list[str] = []
+    if use_llm:
+        llm_entries, llm_warnings = _llm_supervisor_entries(
+            requirement,
+            current,
+            selected_document,
+            change_type,
+            discussion,
+        )
+    files = _merge_plan_entries([*llm_entries, *rule_entries], current)
+    required_files = [item["file"] for item in files if item.get("required")]
+    writable_files = [item["file"] for item in files if item.get("writable")]
+    reference_files = [item["file"] for item in files if not item.get("writable")]
+    return {
+        "agent": "pm_supervisor",
+        "source": "llm_supervisor+rules" if use_llm else "rules",
+        "requires_confirmation": True,
+        "files": files,
+        "required_files": required_files,
+        "writable_files": writable_files,
+        "reference_files": reference_files,
+        "warnings": warnings + llm_warnings,
+    }
+
+
+def _targets_from_supervisor_plan(plan: dict[str, Any]) -> tuple[list[str], list[str], list[str]]:
+    files = [
+        str(item.get("file", "")).strip()
+        for item in plan.get("files", [])
+        if isinstance(item, dict) and item.get("file")
+    ]
+    affected_files = _ordered_files(set(files))
+    agents = sorted({
+        str(item.get("agent") or AGENT_BY_FILE.get(str(item.get("file", "")), "pm_supervisor"))
+        for item in plan.get("files", [])
+        if isinstance(item, dict)
+    })
+    return affected_files, agents, []
+
+
+def _select_targets(
+    requirement: str,
+    current: Path,
+    selected_document: str | None = None,
+    analysis_feedback: str = "",
+) -> tuple[list[str], list[str], list[str]]:
+    entries, _warnings = _build_rule_supervisor_entries(
+        requirement,
+        current,
+        selected_document,
+        "existing_feature",
+        analysis_feedback,
+    )
+    return _targets_from_supervisor_plan({"files": entries})
 
 
 def _dependency_graph(data_dir: str | Path) -> dict[str, list[str]]:
@@ -471,6 +710,7 @@ def analyze_change(
     change_type: str = "existing_feature",
     analysis_feedback: str = "",
     previous_change_id: str = "",
+    impact_confirmed: bool = False,
 ) -> dict[str, Any]:
     project_dir, manifest = get_project(data_dir, system_id)
     if manifest.get("lifecycle") == "deleted":
@@ -497,12 +737,18 @@ def analyze_change(
     if analysis_feedback:
         discussion.append({"kind": "feedback", "content": analysis_feedback, "created_at": _now()})
 
-    targets, agents, tables = _select_targets(
+    supervisor_plan = _build_supervisor_plan(
         requirement,
         _current_dir(project_dir),
         selected_document,
+        change_type,
+        discussion,
         analysis_feedback,
+        previous_analysis if isinstance(previous_analysis, dict) else None,
+        reuse_previous=bool(impact_confirmed and previous_analysis and not analysis_feedback),
+        use_llm=bool(generate_proposal),
     )
+    targets, agents, tables = _targets_from_supervisor_plan(supervisor_plan)
     anchors = {
         target: _headings(_current_dir(project_dir) / target)[:30]
         for target in targets if target.endswith(".md")
@@ -521,21 +767,25 @@ def analyze_change(
         "previous_preview": previous_analysis.get("preview") if isinstance(previous_analysis, dict) else None,
         "change_type": change_type,
         "selected_document": selected_document,
+        "impact_confirmed": bool(impact_confirmed),
+        "requires_impact_confirmation": bool(generate_proposal and not impact_confirmed),
         "created_at": _now(),
         "affected_files": targets,
-        "writable_files": [target for target in targets if target in ITERABLE_TARGETS],
-        "reference_files": [target for target in targets if target not in ITERABLE_TARGETS],
+        "writable_files": list(supervisor_plan.get("writable_files", [target for target in targets if target in WRITABLE_INCREMENTAL_TARGETS])),
+        "reference_files": list(supervisor_plan.get("reference_files", [target for target in targets if target not in WRITABLE_INCREMENTAL_TARGETS])),
         "affected_tables": tables,
         "affected_agents": agents,
+        "supervisor_plan": supervisor_plan,
         "anchors": anchors,
         "dependent_systems": dependents,
         "final_audit_required": True,
     }
-    if generate_proposal:
-        text_changes, numerical_operations = _generate_change_proposal(_current_dir(project_dir), analysis)
+    if generate_proposal and impact_confirmed:
+        text_changes, numerical_operations, numerical_doc_changes = _generate_change_proposal(_current_dir(project_dir), analysis)
         analysis["proposal"] = {
             "text_changes": text_changes,
             "numerical_operations": numerical_operations,
+            "numerical_doc_changes": numerical_doc_changes,
         }
         analysis["preview"] = {
             "text_changes": [
@@ -548,6 +798,7 @@ def analyze_change(
                 for item in text_changes
             ],
             "numerical_operations": numerical_operations,
+            "numerical_doc_changes": numerical_doc_changes,
         }
     _write_json(_pending_dir(project_dir) / f"{change_id}.json", analysis)
     if previous_change_id and previous_change_id != change_id:
@@ -596,6 +847,20 @@ def _records_for_table(data: dict[str, Any], table: str, create: bool = False) -
 
 def _match_row(row: dict[str, Any], match: dict[str, Any]) -> bool:
     return all(row.get(key) == value for key, value in match.items())
+
+
+GLOBAL_NUMERICAL_TABLE_ALIASES = {
+    "system_numerical_data",
+    "system_numerical_data.json",
+    "global",
+    "globals",
+    "parameters",
+    "params",
+}
+
+
+def _is_global_numerical_table(table: str) -> bool:
+    return table.strip().lower() in GLOBAL_NUMERICAL_TABLE_ALIASES
 
 
 def normalize_numerical_operations(operations: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
@@ -686,7 +951,28 @@ def apply_numerical_operations(data: dict[str, Any], operations: list[dict[str, 
             raise ValueError(f"Invalid numerical operation: {operation}")
 
         count = 0
-        if action == "create_table":
+        if _is_global_numerical_table(table):
+            if action == "add_column":
+                column = str(operation.get("column", "")).strip()
+                if not column:
+                    raise ValueError("add_column requires column")
+                if column not in data:
+                    data[column] = operation.get("default")
+                    count = 1
+            elif action == "delete_column":
+                column = str(operation.get("column", "")).strip()
+                if column in data:
+                    del data[column]
+                    count = 1
+            elif action == "update_rows":
+                values = operation.get("values", {})
+                if not isinstance(values, dict) or not values:
+                    raise ValueError("global update_rows requires object values")
+                data.update(values)
+                count = len(values)
+            else:
+                raise ValueError(f"{action} cannot target global numerical parameters")
+        elif action == "create_table":
             if table in data:
                 raise ValueError(f"Table already exists: {table}")
             rows = operation.get("rows", [])
@@ -735,6 +1021,52 @@ def apply_numerical_operations(data: dict[str, Any], operations: list[dict[str, 
     return results
 
 
+def apply_numerical_doc_changes(docs: dict[str, Any], changes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for change in changes:
+        if not isinstance(change, dict):
+            raise ValueError("numerical_doc_changes entries must be objects")
+        table = str(change.get("table") or change.get("scope") or "").strip()
+        field = str(
+            change.get("field")
+            or change.get("column")
+            or change.get("parameter")
+            or change.get("name")
+            or ""
+        ).strip()
+        description = str(
+            change.get("description")
+            or change.get("content")
+            or change.get("comment")
+            or ""
+        ).strip()
+        if not field and not description:
+            raise ValueError("numerical_doc_changes requires field or description")
+        key = "global_parameters" if not table or _is_global_numerical_table(table) else table
+        existing = docs.get(key)
+        if isinstance(existing, dict):
+            section = existing
+        elif isinstance(existing, str):
+            section = {"description": existing}
+            docs[key] = section
+        elif existing is None:
+            section = {}
+            docs[key] = section
+        else:
+            section = {"description": str(existing)}
+            docs[key] = section
+        if field:
+            section[field] = description or field
+        else:
+            notes = section.setdefault("_notes", [])
+            if not isinstance(notes, list):
+                notes = [str(notes)]
+                section["_notes"] = notes
+            notes.append(description)
+        results.append({"table": key, "field": field or "_notes"})
+    return results
+
+
 def _compact_context(content: str, limit: int) -> str:
     if len(content) <= limit:
         return content
@@ -743,7 +1075,7 @@ def _compact_context(content: str, limit: int) -> str:
     return content[:head] + "\n\n...[中间内容已省略，禁止据此重写全文]...\n\n" + content[-tail:]
 
 
-def _generate_change_proposal(current: Path, analysis: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _generate_change_proposal(current: Path, analysis: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Ask the affected roles for a scoped patch proposal, never a full-document rewrite."""
     from Skills.llm_client import ask_llm, safe_extract_json
 
@@ -773,6 +1105,8 @@ def _generate_change_proposal(current: Path, analysis: dict[str, Any]) -> tuple[
 只允许修改“可写文件”，只读参考文件仅用于判断依赖和一致性，禁止出现在修改方案中。
 用户选中的主文档必须出现在修改方案中。
 如果可写文件包含 system_numerical_data.json，必须根据需求输出至少一个格式完整的 numerical_operations 操作。
+如果可写文件包含 system_numerical_docs.json，且数值操作新增/删除/修改了表、字段或顶层参数，必须输出 numerical_doc_changes 同步说明。
+监管方标记为必改的 Markdown 文档必须都出现在 text_changes 中。
 输出纯 JSON，不要 Markdown 代码块。"""
     user_prompt = f"""修改需求：
 {analysis['requirement']}
@@ -784,6 +1118,7 @@ def _generate_change_proposal(current: Path, analysis: dict[str, Any]) -> tuple[
 受影响 Agent：{', '.join(analysis.get('affected_agents', []))}
 可写文件：{', '.join(analysis.get('writable_files', []))}
 只读参考文件：{', '.join(analysis.get('reference_files', [])) or "无"}
+监管拆分结果：{json.dumps(analysis.get('supervisor_plan', {}), ensure_ascii=False)}
 定位到的章节：{json.dumps(analysis.get('anchors', {}), ensure_ascii=False)}
 
 当前内容：
@@ -796,6 +1131,9 @@ def _generate_change_proposal(current: Path, analysis: dict[str, Any]) -> tuple[
   ],
   "numerical_operations": [
     {{"action": "六种操作之一", "table": "表名", "...": "该操作需要的字段"}}
+  ],
+  "numerical_doc_changes": [
+    {{"table": "表名或 system_numerical_data", "field": "字段/参数名", "description": "字段含义、类型、默认值、配置规则"}}
   ]
 }}"""
     raw = ask_llm(
@@ -816,14 +1154,14 @@ def _generate_change_proposal(current: Path, analysis: dict[str, Any]) -> tuple[
         raise ValueError("AI 增量修改方案必须是 JSON 对象")
     text_changes = proposal.get("text_changes", [])
     numerical_operations = proposal.get("numerical_operations", [])
-    if not isinstance(text_changes, list) or not isinstance(numerical_operations, list):
+    numerical_doc_changes = proposal.get("numerical_doc_changes", [])
+    if not isinstance(text_changes, list) or not isinstance(numerical_operations, list) or not isinstance(numerical_doc_changes, list):
         raise ValueError("AI 增量修改方案字段格式错误")
     approved_files = set(analysis.get("writable_files", analysis.get("affected_files", [])))
     proposal_warnings: list[str] = []
     numerical_operations, numerical_errors = normalize_numerical_operations(numerical_operations)
     if numerical_errors:
         proposal_warnings.extend(f"数值方案不完整：{error}" for error in numerical_errors)
-        analysis["proposal_incomplete"] = True
     approved_text_changes: list[dict[str, Any]] = []
     for item in text_changes:
         filename = str(item.get("file", "")).strip() if isinstance(item, dict) else ""
@@ -838,17 +1176,65 @@ def _generate_change_proposal(current: Path, analysis: dict[str, Any]) -> tuple[
     if "system_numerical_data.json" in approved_files and not numerical_operations:
         proposal_warnings.append("影响范围包含数值配置，但模型未生成数值操作；请补充分析意见后重新分析")
         analysis["proposal_incomplete"] = True
+    approved_doc_changes: list[dict[str, Any]] = []
+    for item in numerical_doc_changes:
+        if isinstance(item, dict):
+            approved_doc_changes.append(item)
+        else:
+            proposal_warnings.append("已忽略格式错误的数值说明修改")
+    numerical_doc_changes = approved_doc_changes
+    if numerical_doc_changes and NUMERICAL_DOC_TARGET not in approved_files:
+        proposal_warnings.append("已忽略未批准的数值说明修改")
+        numerical_doc_changes = []
+    if numerical_operations and NUMERICAL_DOC_TARGET in approved_files and not numerical_doc_changes:
+        proposal_warnings.append("数值数据存在变更，但模型未同步补充数值说明")
+        analysis["proposal_incomplete"] = True
     if proposal_warnings:
         analysis["proposal_warnings"] = proposal_warnings
 
-    if selected_document in TEXT_TARGETS and not any(
-        isinstance(item, dict) and item.get("file") == selected_document
-        for item in text_changes
-    ):
-        raise ValueError(f"AI 方案未包含用户选中的主文档: {selected_document}")
+    required_text_files = [
+        item.get("file")
+        for item in analysis.get("supervisor_plan", {}).get("files", [])
+        if isinstance(item, dict) and item.get("required") and item.get("file") in TEXT_TARGETS
+    ]
+    for filename in required_text_files:
+        if not any(isinstance(item, dict) and item.get("file") == filename for item in text_changes):
+            proposal_warnings.append(f"必改文档缺少文本变更: {filename}")
+            analysis["proposal_incomplete"] = True
     if selected_document == "system_numerical_data.json" and not numerical_operations:
         analysis["proposal_incomplete"] = True
-    return text_changes, numerical_operations
+    if proposal_warnings:
+        analysis["proposal_warnings"] = proposal_warnings
+    return text_changes, numerical_operations, numerical_doc_changes
+
+
+def _has_required_proposal_changes(
+    analysis: dict[str, Any],
+    text_changes: list[dict[str, Any]],
+    numerical_operations: list[dict[str, Any]],
+    numerical_doc_changes: list[dict[str, Any]] | None = None,
+) -> bool:
+    numerical_doc_changes = numerical_doc_changes or []
+    if not text_changes and not numerical_operations:
+        return False
+    selected_document = str(analysis.get("selected_document") or "")
+    for item in analysis.get("supervisor_plan", {}).get("files", []):
+        if not isinstance(item, dict) or not item.get("required"):
+            continue
+        filename = str(item.get("file", ""))
+        if filename in TEXT_TARGETS and not any(
+            isinstance(change, dict) and change.get("file") == filename
+            for change in text_changes
+        ):
+            return False
+    writable_files = set(analysis.get("writable_files", analysis.get("affected_files", [])))
+    if "system_numerical_data.json" in writable_files and not numerical_operations:
+        return False
+    if numerical_operations and NUMERICAL_DOC_TARGET in writable_files and not numerical_doc_changes:
+        return False
+    if selected_document == "system_numerical_data.json" and not numerical_operations:
+        return False
+    return True
 
 
 def _duplicate_ids(value: Any, path: str = "$") -> list[str]:
@@ -935,7 +1321,12 @@ def _stage_excel_operations(
     staged: list[str] = []
     excel_dir = data_dir / "Excel"
     staging_dir.mkdir(parents=True, exist_ok=True)
-    for table in sorted({str(item.get("table", "")).strip() for item in operations if item.get("table")}):
+    tables = {
+        str(item.get("table", "")).strip()
+        for item in operations
+        if item.get("table") and not _is_global_numerical_table(str(item.get("table", "")).strip())
+    }
+    for table in sorted(tables):
         source = excel_dir / f"{table}.json"
         existing = _read_json(source, {})
         if isinstance(existing, dict) and isinstance(existing.get("data"), list):
@@ -999,6 +1390,7 @@ def apply_change(
     change_id: str,
     text_changes: list[dict[str, Any]] | None = None,
     numerical_operations: list[dict[str, Any]] | None = None,
+    numerical_doc_changes: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     project_dir, manifest = get_project(data_dir, system_id)
     analysis = _read_json(_pending_dir(project_dir) / f"{change_id}.json", None)
@@ -1007,20 +1399,29 @@ def apply_change(
 
     text_changes = text_changes or []
     numerical_operations = numerical_operations or []
-    if not text_changes and not numerical_operations:
+    numerical_doc_changes = numerical_doc_changes or []
+    if not text_changes and not numerical_operations and not numerical_doc_changes:
         proposal = analysis.get("proposal", {})
         text_changes = proposal.get("text_changes", []) if isinstance(proposal, dict) else []
         numerical_operations = proposal.get("numerical_operations", []) if isinstance(proposal, dict) else []
-    if not text_changes and not numerical_operations:
-        text_changes, numerical_operations = _generate_change_proposal(_current_dir(project_dir), analysis)
+        numerical_doc_changes = proposal.get("numerical_doc_changes", []) if isinstance(proposal, dict) else []
+    if not text_changes and not numerical_operations and not numerical_doc_changes:
+        text_changes, numerical_operations, numerical_doc_changes = _generate_change_proposal(_current_dir(project_dir), analysis)
     numerical_operations, numerical_errors = normalize_numerical_operations(numerical_operations)
     if numerical_errors:
         raise ValueError("数值变更方案不完整，请重新分析：" + "；".join(numerical_errors))
-    if analysis.get("proposal_incomplete"):
+    if not _has_required_proposal_changes(
+        analysis,
+        text_changes,
+        numerical_operations,
+        numerical_doc_changes,
+    ):
         raise ValueError("当前修改方案存在已知遗漏，请补充意见并重新分析后再应用")
     writable_files = analysis.get("writable_files", analysis.get("affected_files", []))
     if numerical_operations and "system_numerical_data.json" not in writable_files:
         raise ValueError("Numerical operations are outside the approved impact scope")
+    if numerical_doc_changes and NUMERICAL_DOC_TARGET not in writable_files:
+        raise ValueError("Numerical doc changes are outside the approved impact scope")
 
     staging = Path(tempfile.mkdtemp(prefix=".change-", dir=project_dir))
     excel_staging = Path(tempfile.mkdtemp(prefix=".excel-change-", dir=project_dir))
@@ -1050,6 +1451,14 @@ def apply_change(
                 raise ValueError("system_numerical_data.json must contain an object")
             numerical_results = apply_numerical_operations(numerical, numerical_operations)
             _write_json(numerical_path, numerical)
+        numerical_doc_results: list[dict[str, Any]] = []
+        if numerical_doc_changes:
+            numerical_docs_path = staging / NUMERICAL_DOC_TARGET
+            numerical_docs = _read_json(numerical_docs_path, {})
+            if not isinstance(numerical_docs, dict):
+                numerical_docs = {}
+            numerical_doc_results = apply_numerical_doc_changes(numerical_docs, numerical_doc_changes)
+            _write_json(numerical_docs_path, numerical_docs)
         staged_tables = _stage_excel_operations(Path(data_dir), numerical_operations, excel_staging) if numerical_operations else []
 
         deterministic_audit = _validate_project(staging)
@@ -1065,6 +1474,7 @@ def apply_change(
             "selected_document": analysis.get("selected_document"),
             "affected_files": analysis.get("affected_files", []),
             "affected_agents": analysis.get("affected_agents", []),
+            "supervisor_plan": analysis.get("supervisor_plan", {}),
         })
         excel_snapshot = _history_dir(project_dir) / history_entry["id"] / "excel_snapshot"
         snapshot_index: dict[str, bool] = {}
@@ -1093,6 +1503,7 @@ def apply_change(
             "selected_document": analysis.get("selected_document"),
             "text_files": applied_text,
             "numerical_changes": numerical_results,
+            "numerical_doc_changes": numerical_doc_results,
             "excel_tables": staged_tables,
             "audit": audit,
             "history_id": history_entry["id"],

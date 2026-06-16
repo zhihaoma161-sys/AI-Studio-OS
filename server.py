@@ -55,7 +55,7 @@ FRAMEWORK_FILES = {
 
 HOST = os.environ.get("AI_STUDIO_HOST", "127.0.0.1")
 PORT = int(os.environ.get("AI_STUDIO_PORT", "8080"))
-WEB_CLIENT_VERSION = "20260615.5"
+WEB_CLIENT_VERSION = "20260616.2"
 _default_origins = f"http://localhost:{PORT},http://127.0.0.1:{PORT}"
 ALLOWED_ORIGINS = {
     origin.strip()
@@ -401,6 +401,8 @@ def api_analyze_change(data: dict):
     requirement = str(data.get("requirement", ""))
     analysis_feedback = str(data.get("analysis_feedback", "")).strip()
     previous_change_id = str(data.get("previous_change_id", "")).strip()
+    raw_impact_confirmed = data.get("impact_confirmed", False)
+    impact_confirmed = raw_impact_confirmed is True or str(raw_impact_confirmed).lower() in {"1", "true", "yes", "y"}
     _log_change_analysis(
         "started",
         trace_id,
@@ -412,6 +414,7 @@ def api_analyze_change(data: dict):
         requirement_chars=len(requirement),
         feedback_chars=len(analysis_feedback),
         previous_change_id=previous_change_id,
+        impact_confirmed=impact_confirmed,
     )
     try:
         if client_version and client_version != WEB_CLIENT_VERSION:
@@ -434,6 +437,7 @@ def api_analyze_change(data: dict):
             change_type=change_type,
             analysis_feedback=analysis_feedback,
             previous_change_id=previous_change_id,
+            impact_confirmed=impact_confirmed,
         )
         duration_ms = round((time.perf_counter() - started) * 1000)
         _log_change_analysis(
@@ -442,6 +446,7 @@ def api_analyze_change(data: dict):
             duration_ms=duration_ms,
             affected_files=result.get("affected_files", []),
             writable_files=result.get("writable_files", []),
+            impact_confirmed=result.get("impact_confirmed"),
         )
         return JSONResponse({"ok": True, "trace_id": trace_id, "duration_ms": duration_ms, **result})
     except Exception as exc:
@@ -464,6 +469,7 @@ def api_apply_change(data: dict):
             str(data.get("change_id", "")),
             data.get("text_changes"),
             data.get("numerical_operations"),
+            data.get("numerical_doc_changes"),
         )
         _refresh_codex()
         return JSONResponse(result)

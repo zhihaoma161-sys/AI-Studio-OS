@@ -66,6 +66,7 @@ class ProjectStoreTests(unittest.TestCase):
         write_project(self.root / "projects" / "背包系统_20260601_120000", "背包系统", "original")
         migrate_legacy_projects(self.root)
         original_path = self.root / "projects" / "背包系统" / "current" / "system_design_detail.md"
+        current_dir = original_path.parent
         original = original_path.read_bytes()
         excel_path = self.root / "Excel" / "item_table.json"
         excel_path.write_text(
@@ -89,6 +90,16 @@ class ProjectStoreTests(unittest.TestCase):
                 "table": "item_table",
                 "match": {"id": 1},
                 "values": {"value": "updated"},
+            }, {
+                "action": "add_column",
+                "table": "system_numerical_data",
+                "column": "SELL_CURRENCY",
+                "default": "gold",
+            }],
+            numerical_doc_changes=[{
+                "table": "system_numerical_data",
+                "field": "SELL_CURRENCY",
+                "description": "出售结算使用的货币类型。",
             }],
         )
 
@@ -99,11 +110,21 @@ class ProjectStoreTests(unittest.TestCase):
             (self.root / "projects" / "背包系统" / "current" / "system_numerical_data.json").read_text(encoding="utf-8")
         )
         self.assertEqual(numerical["item_table"][0]["value"], "updated")
+        self.assertEqual(numerical["SELL_CURRENCY"], "gold")
+        numerical_docs = json.loads(
+            (current_dir / "system_numerical_docs.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(numerical_docs["global_parameters"]["SELL_CURRENCY"], "出售结算使用的货币类型。")
         excel = json.loads(excel_path.read_text(encoding="utf-8"))
         self.assertEqual(excel["data"][0]["value"], "updated")
 
         rollback = rollback_project(self.root, "背包系统", result["history_id"])
         self.assertEqual(original_path.read_bytes(), original)
+        numerical = json.loads(
+            (self.root / "projects" / "背包系统" / "current" / "system_numerical_data.json").read_text(encoding="utf-8")
+        )
+        self.assertNotIn("SELL_CURRENCY", numerical)
+        self.assertFalse((current_dir / "system_numerical_docs.json").exists())
         excel = json.loads(excel_path.read_text(encoding="utf-8"))
         self.assertEqual(excel["data"][0]["value"], "original")
         manifest = json.loads((self.root / "projects" / "背包系统" / "manifest.json").read_text(encoding="utf-8"))
@@ -208,6 +229,7 @@ class ProjectStoreTests(unittest.TestCase):
                 change_type="new_feature",
             )
             self.assertIn("system_numerical_data.json", scoped["writable_files"])
+            self.assertIn("system_numerical_docs.json", scoped["writable_files"])
             self.assertIn("numerical_planner", scoped["affected_agents"])
 
         first = analyze_change(
@@ -257,6 +279,136 @@ class ProjectStoreTests(unittest.TestCase):
         self.assertIn("system_numerical_data.json", positive["writable_files"])
         self.assertIn("numerical_planner", positive["affected_agents"])
 
+    def test_supervisor_plan_expands_new_feature_from_draft(self):
+        legacy = self.root / "projects" / "背包系统_20260601_120000"
+        write_project(legacy, "背包系统", "original")
+        (legacy / "system_design_draft.md").write_text("# 背包系统大纲\n", encoding="utf-8")
+        (legacy / "ui_interaction_blueprint.md").write_text("# 背包系统 UX\n", encoding="utf-8")
+        (legacy / "system_numerical_docs.json").write_text("{}", encoding="utf-8")
+        migrate_legacy_projects(self.root)
+
+        with patch("Skills.llm_client.ask_llm", return_value=json.dumps({"files": []}, ensure_ascii=False)):
+            analysis = analyze_change(
+                self.root,
+                "背包系统",
+                "新增背包出售功能，点击出售按钮后进入批量选择并预览出售结果，配置每个道具出售价格 sell_price 字段",
+                generate_proposal=True,
+                selected_document="system_design_draft.md",
+                change_type="new_feature",
+            )
+
+        self.assertTrue(analysis["requires_impact_confirmation"])
+        self.assertNotIn("proposal", analysis)
+        required = {
+            item["file"]
+            for item in analysis["supervisor_plan"]["files"]
+            if item.get("required")
+        }
+        self.assertTrue({
+            "system_design_draft.md",
+            "system_design_detail.md",
+            "ui_interaction_blueprint.md",
+            "system_numerical_data.json",
+            "system_numerical_docs.json",
+        }.issubset(required))
+        self.assertTrue({
+            "lead_planner",
+            "system_planner",
+            "ux_agent",
+            "numerical_planner",
+        }.issubset(set(analysis["affected_agents"])))
+
+    def test_confirmed_proposal_missing_supervised_docs_is_incomplete(self):
+        legacy = self.root / "projects" / "背包系统_20260601_120000"
+        write_project(legacy, "背包系统", "original")
+        (legacy / "system_design_draft.md").write_text("# 背包系统大纲\n", encoding="utf-8")
+        (legacy / "ui_interaction_blueprint.md").write_text("# 背包系统 UX\n", encoding="utf-8")
+        (legacy / "system_numerical_docs.json").write_text("{}", encoding="utf-8")
+        migrate_legacy_projects(self.root)
+        model_output = json.dumps({
+            "text_changes": [{
+                "file": "system_design_draft.md",
+                "anchor": "功能列表",
+                "content": "新增背包出售功能。",
+                "deprecated": "",
+            }],
+            "numerical_operations": [{
+                "action": "add_column",
+                "table": "item_table",
+                "column": "sell_price",
+                "default": 0,
+            }],
+            "numerical_doc_changes": [{
+                "table": "item_table",
+                "field": "sell_price",
+                "description": "道具出售价格。",
+            }],
+        }, ensure_ascii=False)
+
+        with patch("Skills.llm_client.ask_llm", side_effect=[
+            json.dumps({"files": []}, ensure_ascii=False),
+            model_output,
+        ]):
+            analysis = analyze_change(
+                self.root,
+                "背包系统",
+                "新增背包出售功能，点击出售按钮后进入批量选择并预览出售结果，配置每个道具出售价格 sell_price 字段",
+                generate_proposal=True,
+                selected_document="system_design_draft.md",
+                change_type="new_feature",
+                impact_confirmed=True,
+            )
+
+        self.assertTrue(analysis["proposal_incomplete"])
+        self.assertTrue(any("system_design_detail.md" in warning for warning in analysis["proposal_warnings"]))
+        self.assertTrue(any("ui_interaction_blueprint.md" in warning for warning in analysis["proposal_warnings"]))
+        with self.assertRaisesRegex(ValueError, "宸茬煡閬楁紡|已知遗漏"):
+            apply_change(self.root, "背包系统", analysis["change_id"])
+
+    def test_numerical_changes_without_docs_are_blocked(self):
+        legacy = self.root / "projects" / "背包系统_20260601_120000"
+        write_project(legacy, "背包系统", "original")
+        (legacy / "system_numerical_docs.json").write_text("{}", encoding="utf-8")
+        migrate_legacy_projects(self.root)
+        model_output = json.dumps({
+            "text_changes": [{
+                "file": "system_design_draft.md",
+                "anchor": "功能列表",
+                "content": "新增道具出售功能。",
+                "deprecated": "",
+            }, {
+                "file": "system_design_detail.md",
+                "anchor": "核心规则",
+                "content": "新增道具出售流程。",
+                "deprecated": "",
+            }],
+            "numerical_operations": [{
+                "action": "add_column",
+                "table": "item_table",
+                "column": "sell_price",
+                "default": 0,
+            }],
+        }, ensure_ascii=False)
+
+        with patch("Skills.llm_client.ask_llm", side_effect=[
+            json.dumps({"files": []}, ensure_ascii=False),
+            model_output,
+        ]):
+            analysis = analyze_change(
+                self.root,
+                "背包系统",
+                "新增道具出售功能，需要配置出售价格 sell_price 字段",
+                generate_proposal=True,
+                selected_document="system_design_detail.md",
+                change_type="new_feature",
+                impact_confirmed=True,
+            )
+
+        self.assertTrue(analysis["proposal_incomplete"])
+        self.assertTrue(any("数值说明" in warning or "鏁板€艰鏄" in warning for warning in analysis["proposal_warnings"]))
+        with self.assertRaisesRegex(ValueError, "宸茬煡閬楁紡|已知遗漏"):
+            apply_change(self.root, "背包系统", analysis["change_id"])
+
     def test_generated_proposal_uses_writable_files_and_read_only_references(self):
         write_project(self.root / "projects" / "背包系统_20260601_120000", "背包系统", "original")
         migrate_legacy_projects(self.root)
@@ -275,6 +427,7 @@ class ProjectStoreTests(unittest.TestCase):
                 generate_proposal=True,
                 selected_document="tech_blueprint.md",
                 change_type="new_feature",
+                impact_confirmed=True,
             )
 
         self.assertEqual(analysis["writable_files"], ["tech_blueprint.md"])
@@ -306,12 +459,60 @@ class ProjectStoreTests(unittest.TestCase):
                 generate_proposal=True,
                 selected_document="system_design_detail.md",
                 change_type="new_feature",
+                impact_confirmed=True,
             )
 
         self.assertTrue(analysis["proposal_incomplete"])
         self.assertTrue(any("缺少 column" in warning for warning in analysis["proposal_warnings"]))
         with self.assertRaisesRegex(ValueError, "已知遗漏"):
             apply_change(self.root, "背包系统", analysis["change_id"])
+
+    def test_invalid_extra_numerical_operation_warns_without_blocking_complete_preview(self):
+        write_project(self.root / "projects" / "背包系统_20260601_120000", "背包系统", "original")
+        migrate_legacy_projects(self.root)
+        model_output = json.dumps({
+            "text_changes": [{
+                "file": "system_design_draft.md",
+                "anchor": "功能列表",
+                "content": "新增道具出售功能。",
+                "deprecated": "",
+            }, {
+                "file": "system_design_detail.md",
+                "anchor": "核心规则",
+                "content": "新增道具出售流程。",
+                "deprecated": "",
+            }],
+            "numerical_operations": [
+                {"action": "add_column", "table": "item_table", "column": "sell_price", "default": 0},
+                {"action": "update_rows", "table": "item_table", "rows": [{"id": 1, "sell_price": 10}]},
+            ],
+            "numerical_doc_changes": [{
+                "table": "item_table",
+                "field": "sell_price",
+                "description": "道具出售价格。",
+            }],
+        }, ensure_ascii=False)
+
+        with patch("Skills.llm_client.ask_llm", return_value=model_output):
+            analysis = analyze_change(
+                self.root,
+                "背包系统",
+                "新增道具出售功能",
+                generate_proposal=True,
+                selected_document="system_design_detail.md",
+                change_type="new_feature",
+                impact_confirmed=True,
+            )
+
+        self.assertNotIn("proposal_incomplete", analysis)
+        self.assertTrue(any("数值方案不完整" in warning for warning in analysis["proposal_warnings"]))
+        self.assertEqual(analysis["proposal"]["numerical_operations"], [{
+            "action": "add_column",
+            "table": "item_table",
+            "column": "sell_price",
+            "default": 0,
+        }])
+        self.assertEqual(analysis["proposal"]["numerical_doc_changes"][0]["field"], "sell_price")
 
     def test_all_numerical_operation_types(self):
         data = {"old": [{"id": 1, "value": 10}]}
